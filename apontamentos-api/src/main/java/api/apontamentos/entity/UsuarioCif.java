@@ -32,6 +32,9 @@ public class UsuarioCif {
     @JoinColumn(name = "usuario_id")
     private Usuarios usuarioId;
 
+    @Column(name = "codcoligada")
+    private Integer codColigada;
+
     @Column
     private String cif;
 

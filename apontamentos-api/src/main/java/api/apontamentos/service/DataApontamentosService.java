@@ -7,7 +7,9 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 import api.apontamentos.entity.DataApontamentos;
+import api.apontamentos.entity.HoraApontamentos;
 import api.apontamentos.repository.DataApontamentosRepository;
+import api.apontamentos.repository.HoraApontamentosRepository;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -15,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 public class DataApontamentosService {
 
     private final DataApontamentosRepository repository;
+    private final HoraApontamentosRepository horaRepository;
 
     // Salva um novo apontamento, definindo o campo "ativo" como true
     public DataApontamentos salvar(DataApontamentos dataApontamentos) {
@@ -73,6 +76,22 @@ public class DataApontamentosService {
         }
         return repository.save(dataRejeitada);
     }
+
+    // public void aprovarPorDia(DataApontamentos data) {
+    //     List<HoraApontamentos> horas = horaRepository.findByDataApontamentoIdAndAtivoTrue(data);
+    //     if (!repository.findByDataAprovacaoIsNullAndDataRejeitadaIsNullAndChapa(data.getDataAprovacao(), 
+    //     data.getDataRejeitada(), data.getChapa()).isEmpty()) {
+    //         for (HoraApontamentos hora : horas) {
+    //             Long id = hora.getId();
+    //             DataApontamentos dataAprovada = repository.findById(id)
+    //             .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
+    //             dataAprovada.setDataAprovacao(LocalDateTime.now());
+    //             dataAprovada.setAprovadorId(dataAprovada.getUsuarioId());
+    //             dataAprovada.setChapa(data.getChapa());
+    //             repository.save(dataAprovada);
+    //         }
+    //     }
+    // }
 
 
 }

@@ -15,7 +15,7 @@ public interface DataApontamentosRepository extends JpaRepository<DataApontament
 
     List<DataApontamentos> findByAtivo(Boolean ativo);
 
-    List<DataApontamentos> findByDataAndChapaAndDataExclusaoIsNull(LocalDate data, String chapa);
+    DataApontamentos findByDataAndChapaAndDataExclusaoIsNull(LocalDate data, String chapa);
 
     DataApontamentos findByDataAprovacaoIsNull(LocalDateTime dataAprovacao);
 

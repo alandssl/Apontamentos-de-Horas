@@ -33,11 +33,11 @@ public class HoraApontamentosService {
         Usuarios usuario = usuarioRepository.findById(dto.getUsuarioId())
                 .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
 
-        List<DataApontamentos> dataExiste = dataRepository
+        DataApontamentos dataExiste = dataRepository
                 .findByDataAndChapaAndDataExclusaoIsNull(dto.getData(), dto.getChapa());
 
         DataApontamentos nova;
-        if (dataExiste.isEmpty()) {
+        if (dataExiste == null) {
             DataApontamentos novaData = new DataApontamentos();
             novaData.setData(dto.getData());
             novaData.setAtivo(true);
@@ -45,8 +45,10 @@ public class HoraApontamentosService {
             novaData.setChapa(dto.getChapa());
 
             nova = dataRepository.save(novaData);
+        }else if(dataExiste.getAprovadorId() != null && dataExiste.getDataAprovacao() != null){
+            throw new RuntimeException("Apontamento já aprovado, não é possível adicionar horas a essa data.");
         } else {
-            nova = dataExiste.get(0);
+            nova = dataExiste;
         }
 
         Tipo tipo = tipoRepository.findById(dto.getTipoId())
@@ -114,5 +116,11 @@ public class HoraApontamentosService {
         return repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
     }
+
+    // public List<HoraApontamentos> buscarPorDataApontamentoId(Long dataId) {
+    //     DataApontamentos data = dataRepository.findById(dataId)
+    //             .orElseThrow(() -> new RuntimeException("Data de apontamento não encontrada com id: " + dataId));
+    //     return repository.findByDataApontamentoIdAndAtivoTrue(data);
+    // }
 
 }

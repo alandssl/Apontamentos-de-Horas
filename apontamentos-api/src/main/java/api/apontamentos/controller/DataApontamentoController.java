@@ -68,6 +68,16 @@ public class DataApontamentoController {
         return ResponseEntity.ok(rejeitada);
     }
 
+    // @PutMapping("/{id}/aprovar-dia")
+    // public ResponseEntity<DataApontamentos> aprovarDia(@PathVariable Long id) {
+    //     DataApontamentos dataId = service.buscarPorId(id)
+    //             .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
+    //     service.aprovarPorDia(dataId);
+    //     return ResponseEntity.ok(dataId);
+    // }
+
+    // @PutMapping("/{id}/aprovar-chapa")
+
     
 
 }

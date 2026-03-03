@@ -14,4 +14,5 @@ public interface HoraApontamentosRepository extends JpaRepository<HoraApontament
     List<HoraApontamentos> findByAtivo(Boolean ativo);
     boolean existsByDataApontamentoIdAndAtivoTrue(DataApontamentos data);
 
+
 }

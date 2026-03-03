@@ -33,19 +33,21 @@ public class HoraApontamentosService {
         Usuarios usuario = usuarioRepository.findById(dto.getUsuarioId())
                 .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
 
-        Optional<DataApontamentos> dataExiste = dataRepository
+        List<DataApontamentos> dataExiste = dataRepository
                 .findByDataAndChapaAndDataExclusaoIsNull(dto.getData(), dto.getChapa());
 
-        DataApontamentos data = dataExiste.orElseGet(() -> {
+        DataApontamentos nova;
+        if (dataExiste.isEmpty()) {
+            DataApontamentos novaData = new DataApontamentos();
+            novaData.setData(dto.getData());
+            novaData.setAtivo(true);
+            novaData.setUsuarioId(usuario);
+            novaData.setChapa(dto.getChapa());
 
-            DataApontamentos nova = new DataApontamentos();
-            nova.setData(dto.getData());
-            nova.setAtivo(true);
-            nova.setUsuarioId(usuario);
-            nova.setChapa(dto.getChapa());
-
-            return dataRepository.save(nova);
-        });
+            nova = dataRepository.save(novaData);
+        } else {
+            nova = dataExiste.get(0);
+        }
 
         Tipo tipo = tipoRepository.findById(dto.getTipoId())
                 .orElseThrow(() -> new RuntimeException("Tipo não encontrado"));
@@ -55,7 +57,7 @@ public class HoraApontamentosService {
         hora.setDetalhe(dto.getDetalhe());
         hora.setUsuarioId(usuario);
         hora.setTipoId(tipo);
-        hora.setDataApontamentoId(data);
+        hora.setDataApontamentoId(nova);
         hora.setAtivo(true);
 
         return repository.save(hora);

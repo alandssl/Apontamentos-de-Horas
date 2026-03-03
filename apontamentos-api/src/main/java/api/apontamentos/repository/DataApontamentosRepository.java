@@ -3,7 +3,7 @@ package api.apontamentos.repository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
+
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -15,7 +15,7 @@ public interface DataApontamentosRepository extends JpaRepository<DataApontament
 
     List<DataApontamentos> findByAtivo(Boolean ativo);
 
-    Optional<DataApontamentos> findByDataAndChapaAndDataExclusaoIsNull(LocalDate data, String chapa);
+    List<DataApontamentos> findByDataAndChapaAndDataExclusaoIsNull(LocalDate data, String chapa);
 
     DataApontamentos findByDataAprovacaoIsNull(LocalDateTime dataAprovacao);
 

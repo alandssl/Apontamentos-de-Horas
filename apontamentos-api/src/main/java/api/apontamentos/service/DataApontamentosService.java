@@ -1,5 +1,6 @@
 package api.apontamentos.service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -7,7 +8,6 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 import api.apontamentos.entity.DataApontamentos;
-import api.apontamentos.entity.HoraApontamentos;
 import api.apontamentos.repository.DataApontamentosRepository;
 import api.apontamentos.repository.HoraApontamentosRepository;
 import lombok.RequiredArgsConstructor;
@@ -92,6 +92,22 @@ public class DataApontamentosService {
     //         }
     //     }
     // }
+
+    public DataApontamentos buscarPorDataEChapa(Long id) {
+        DataApontamentos dataApontamentos = repository.findById(id)
+        .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
+        if (dataApontamentos.getDataAprovacao() == null){
+            DataApontamentos data = repository.findByChapaAndDataRejeitadaIsNullAndDataAprovacaoIsNullAndData(dataApontamentos.getData(), dataApontamentos.getChapa());
+            data.setDataAprovacao(LocalDateTime.now());
+            return repository.save(data);
+        } else {
+            throw new RuntimeException("Apontamento já aprovado, não é possível buscar por data e chapa.");
+        }
+    }
+
+    public List<DataApontamentos> buscarPorDataEntre(LocalDate dataInicio, LocalDate dataFim, String chapa) {
+        return repository.findByDataBetweenAndChapaAndDataExclusaoIsNullAndDataAprovacaoIsNull(dataInicio, dataFim, chapa);
+    }
 
 
 }

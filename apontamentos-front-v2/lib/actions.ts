@@ -4,6 +4,7 @@ import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { sessionOptions, SessionData } from "@/lib/session";
 import { redirect } from "next/navigation";
+import bcrypt from "bcryptjs";
 
 export async function loginAction(prevState: any, formData: FormData) {
   const rawEmail = formData.get("email")?.toString() || "";
@@ -23,6 +24,18 @@ export async function loginAction(prevState: any, formData: FormData) {
       const user = await response.json();
 
       if (user) {
+        let isPasswordValid = false;
+
+        if (user.senha === password) {
+          isPasswordValid = true; // Legacy plain text
+        } else if (user.senha && user.senha.startsWith("$2b$")) {
+          isPasswordValid = await bcrypt.compare(password, user.senha);
+        }
+
+        if (!isPasswordValid) {
+          return { error: "Senha inválida" };
+        }
+
         const session = await getIronSession<SessionData>(
           await cookies(),
           sessionOptions,

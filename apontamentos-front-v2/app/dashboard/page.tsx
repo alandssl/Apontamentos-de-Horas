@@ -41,7 +41,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { ptBR } from 'date-fns/locale';
+import { id, ptBR } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import {
     Tooltip,
@@ -49,6 +49,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useAuth } from '@/contexts/AuthContext';
 
 
 const formSchema = z.object({
@@ -81,6 +82,12 @@ export default function Dashboard() {
     const [typeOptions, setTypeOptions] = useState<{ value: string, label: string }[]>([]);
     const [employees, setEmployees] = useState<string[]>([]);
     const [allUsers, setAllUsers] = useState<any[]>([]);
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
+
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -92,6 +99,7 @@ export default function Dashboard() {
         },
     });
 
+
     // Fetch session and APIs
     useEffect(() => {
         getSessionData().then(session => {
@@ -101,51 +109,85 @@ export default function Dashboard() {
             if (session?.username) {
                 form.setValue("userName", session.username);
             }
+
+            // Fetch Employees
+            fetch(`http://${window.location.hostname}:8080/user`)
+                .then(res => res.json())
+                .then(allUsersData => {
+                    setAllUsers(allUsersData);
+                    if (session?.isAdmin && session?.userId) {
+                        fetch(`http://${window.location.hostname}:8080/chapa-subordinado/${session.userId}`)
+                            .then(res => res.json())
+                            .then(subSupData => {
+                                const validSubSup = Array.isArray(subSupData) ? subSupData : [];
+                                const allowedChapas = validSubSup.map((s: any) => s.chapa).filter(Boolean);
+                                const allowedUsers = allUsersData.filter((u: any) =>
+                                    allowedChapas.includes(u.chapa) || String(u.id) === String(session.userId)
+                                );
+
+                                if (allowedUsers.length === 0) {
+                                    // Fallback: at least show the admin themselves
+                                    const selfUser = allUsersData.find((u: any) => String(u.id) === String(session.userId));
+                                    setEmployees(selfUser ? [selfUser.nome || selfUser.usuario].filter(Boolean) : [session.username].filter(Boolean));
+                                } else {
+                                    setEmployees(Array.from(new Set(allowedUsers.map((u: any) => u.nome || u.usuario).filter(Boolean))));
+                                }
+                            })
+                            .catch(err => {
+                                console.error("Error fetching subordinados", err);
+                                // Se falhar a busca (ex: rota retornar 404), colocar apenas o usuario atual
+                                const selfUser = allUsersData.find((u: any) => String(u.id) === String(session.userId));
+                                setEmployees(selfUser ? [selfUser.nome || selfUser.usuario].filter(Boolean) : [session.username].filter(Boolean));
+                            });
+                    } else {
+                        setEmployees(Array.from(new Set(allUsersData.map((u: any) => u.nome || u.usuario).filter(Boolean))));
+                    }
+                })
+                .catch(err => console.error("Error fetching usuarios", err));
+
+            // Fetch Apontamentos
+            fetch(`http://${window.location.hostname}:8080/horas`)
+                .then(res => res.json())
+                .then(data => {
+                    const fetchedEntries = data.map((h: any) => ({
+                        id: String(h.id),
+                        date: new Date(h.dataApontamentoId?.data ? h.dataApontamentoId.data + 'T00:00:00' : new Date()),
+                        cif: h.detalhe || 'Indefinido',
+                        totalHours: h.horasEfetivas,
+                        totalHoursInput: h.horasEfetivas,
+                        status: h.dataApontamentoId?.dataAprovacao ? 'approved' : 'pending',
+                        type: String(h.tipoId?.id),
+                        description: h.detalhe,
+                        userName: h.usuarioId?.nome || 'Usuário'
+                    }));
+                    setEntries(fetchedEntries);
+                })
+                .catch(err => console.error("Error fetching horas", err));
+
+            // Fetch CIFs
+            fetch(`http://${window.location.hostname}:8080/cif/usuario/${session?.userId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!Array.isArray(data)) {
+                        console.error("CIF response não é um array:", data);
+                        return;
+                    }
+                    setCifOptions(data.map((c: any) => ({ value: c.codccusto, label: `${c.codccusto} - ${c.nome}` })));
+                })
+                .catch(err => console.error("Error fetching cifs", err));
+
+            // Fetch Tipos
+            fetch(`http://${window.location.hostname}:8080/tipos`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!Array.isArray(data)) {
+                        console.error("Tipos response não é um array:", data);
+                        return;
+                    }
+                    setTypeOptions(data.map((t: any) => ({ value: String(t.id), label: t.tipo })));
+                })
+                .catch(err => console.error("Error fetching tipos", err));
         });
-
-        // Fetch Apontamentos
-        fetch("http://localhost:8080/horas")
-            .then(res => res.json())
-            .then(data => {
-                const fetchedEntries = data.map((h: any) => ({
-                    id: String(h.id),
-                    date: new Date(h.dataApontamentoId?.data ? h.dataApontamentoId.data + 'T00:00:00' : new Date()),
-                    cif: h.detalhe || 'Indefinido',
-                    totalHours: h.horasEfetivas,
-                    totalHoursInput: h.horasEfetivas,
-                    status: h.dataApontamentoId?.dataAprovacao ? 'approved' : 'pending',
-                    type: String(h.tipoId?.id),
-                    description: h.detalhe,
-                    userName: h.usuarioId?.nome || 'Usuário'
-                }));
-                setEntries(fetchedEntries);
-            })
-            .catch(err => console.error("Error fetching horas", err));
-
-        // Fetch Employees
-        fetch("http://localhost:8080/user")
-            .then(res => res.json())
-            .then(data => {
-                setAllUsers(data);
-                setEmployees(Array.from(new Set(data.map((u: any) => u.nome || u.usuario))));
-            })
-            .catch(err => console.error("Error fetching usuarios", err));
-
-        // Fetch CIFs
-        fetch("http://localhost:8080/cif/usuario/1")
-            .then(res => res.json())
-            .then(data => {
-                setCifOptions(data.map((c: any) => ({ value: c.codccusto, label: `${c.codccusto} - ${c.nome}` })));
-            })
-            .catch(err => console.error("Error fetching cifs", err));
-
-        // Fetch Tipos
-        fetch("http://localhost:8080/tipos")
-            .then(res => res.json())
-            .then(data => {
-                setTypeOptions(data.map((t: any) => ({ value: String(t.id), label: t.tipo })));
-            })
-            .catch(err => console.error("Error fetching tipos", err));
 
     }, [form]);
 
@@ -171,8 +213,11 @@ export default function Dashboard() {
         return h * 60 + m;
     }
 
+    const watchedUserName = form.watch("userName");
+    const currentUserEntries = entries.filter(e => e.userName === watchedUserName);
+
     // Calculate stats for the selected date
-    const selectedDateEntries = entries.filter(e =>
+    const selectedDateEntries = currentUserEntries.filter(e =>
         selectedDate && format(e.date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
     );
 
@@ -198,6 +243,8 @@ export default function Dashboard() {
             status: 'pending'
         };
 
+        console.log(values.date)
+        console.log(format(values.date, 'yyyy-MM-dd'))
         try {
             // Find the correct references for the API POST
             const tipoObj = typeOptions.find(t => t.value === values.type);
@@ -205,7 +252,7 @@ export default function Dashboard() {
             // Call API
             const adminSelectedUser = allUsers.find(u => (u.nome || u.usuario) === values.userName);
 
-            const response = await fetch("http://localhost:8080/horas", {
+            const response = await fetch(`http://${window.location.hostname}:8080/horas`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -213,7 +260,8 @@ export default function Dashboard() {
                     detalhe: values.cif, // CIF
                     data: format(values.date, 'yyyy-MM-dd'),
                     tipoId: Number(values.type),
-                    usuarioId: adminSelectedUser ? adminSelectedUser.id : 1
+                    usuarioId: adminSelectedUser ? adminSelectedUser.id : 1,
+                    chapa: adminSelectedUser ? adminSelectedUser.chapa : undefined
                 })
             });
 
@@ -247,7 +295,7 @@ export default function Dashboard() {
         }
 
         try {
-            const response = await fetch(`http://localhost:8080/horas/${id}`, {
+            const response = await fetch(`http://${window.location.hostname}:8080/horas/${id}`, {
                 method: "DELETE"
             });
 
@@ -265,7 +313,7 @@ export default function Dashboard() {
 
     // Helper to check if a date has an entry
     const hasEntry = (date: Date) => {
-        return entries.some(entry =>
+        return currentUserEntries.some(entry =>
             format(entry.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
         );
     };
@@ -275,11 +323,11 @@ export default function Dashboard() {
         return day === 0 || day === 6; // 0=Sun, 6=Sat
     };
 
-    const hasEntryOnDate = (d: Date) => entries.some(e => isSameDay(e.date, d));
+    const hasEntryOnDate = (d: Date) => currentUserEntries.some(e => isSameDay(e.date, d));
 
     return (
         <>
-            <div className="w-full max-w-6xl flex flex-col gap-6 p-4 md:gap-8 md:p-8">
+            <div className="w-full max-w-screen-2xl flex flex-col gap-6 p-4 md:gap-8 md:p-8">
                 <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
                     {/* Calendar Section */}
                     <Card className="shadow-lg border-zinc-200/50 dark:border-zinc-800/50 flex-1 w-full">
@@ -294,15 +342,19 @@ export default function Dashboard() {
                                 <div className="flex items-center gap-4 text-xs mt-2 flex-wrap">
                                     <div className="flex items-center gap-1">
                                         <div className="w-3 h-3 rounded-md bg-emerald-500"></div>
-                                        <span>Apontado</span>
+                                        <span>Apontado (8h+)</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <div className="w-3 h-3 rounded-md" style={{ background: 'linear-gradient(to right, #22c55e 50%, #fde047 50%)' }}></div>
+                                        <span>Parcial (&lt;8h)</span>
                                     </div>
                                     <div className="flex items-center gap-1">
                                         <div className="w-3 h-3 rounded-md bg-yellow-300"></div>
-                                        <span>1 ou 2 dias sem apontuar</span>
+                                        <span>1 ou 2 dias sem apontar</span>
                                     </div>
                                     <div className="flex items-center gap-1">
                                         <div className="w-3 h-3 rounded-md bg-rose-600"></div>
-                                        <span>3+ dias sem apontuar</span>
+                                        <span>3+ dias sem apontar</span>
                                     </div>
                                 </div>
                             </CardDescription>
@@ -333,77 +385,96 @@ export default function Dashboard() {
                         </CardHeader>
                         <CardContent className="flex justify-center p-2 sm:p-6 w-full overflow-hidden">
                             <div className="w-full flex justify-center overflow-x-auto pb-2">
-                                <Calendar
-                                    mode="single"
-                                    showOutsideDays={false}
-                                    selected={selectedDate}
-                                    onSelect={onDateSelect}
-                                    disabled={(date) => {
-                                        const today = new Date();
-                                        today.setHours(0, 0, 0, 0);
-                                        const fortyDaysAgo = subDays(today, 40);
-                                        return date > new Date() || date < fortyDaysAgo;
-                                    }}
-                                    className="rounded-xl border shadow-sm p-3 sm:p-6 w-full max-w-full overflow-hidden h-fit flex justify-center [--cell-size:11.5vw] sm:[--cell-size:60px] md:[--cell-size:75px] text-base sm:text-lg"
-                                    classNames={{
-                                        day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-                                        day_today: "bg-accent text-accent-foreground",
-                                        month: "w-full",
-                                        table: "w-full border-collapse",
-                                        weekdays: "flex w-full mb-2",
-                                        weekday: "text-muted-foreground flex-1 text-center font-medium text-[0.8rem] sm:text-base select-none",
-                                        week: "flex w-full mt-1 sm:mt-2",
-                                        day: "relative flex-1 p-0 text-center flex items-center justify-center border border-zinc-900/30 dark:border-zinc-500/30 rounded-md mx-[1px]",
-                                        day_button: "font-bold text-lg sm:text-2xl w-full h-full",
-                                    }}
-                                    modifiers={{
-                                        hasEntry: (date) => hasEntry(date),
-                                        dangerGap: (date) => {
-                                            if (hasEntry(date) || date >= new Date() || isWeekend(date)) return false;
-                                            let workDaysPassed = 0;
-                                            let current = new Date(date);
-                                            current.setHours(0, 0, 0, 0);
-                                            const now = new Date();
-                                            now.setHours(0, 0, 0, 0);
-                                            while (current < now) {
-                                                if (!isWeekend(current)) workDaysPassed++;
-                                                current.setDate(current.getDate() + 1);
+                                {isMounted ? (
+                                    <Calendar
+                                        mode="single"
+                                        showOutsideDays={false}
+                                        selected={selectedDate}
+                                        onSelect={onDateSelect}
+                                        disabled={(date) => {
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            const fortyDaysAgo = subDays(today, 40);
+                                            return date > new Date() || date < fortyDaysAgo;
+                                        }}
+                                        className="rounded-xl border shadow-sm p-3 sm:p-6 w-full max-w-full overflow-hidden h-fit flex justify-center [--cell-size:11.5vw] sm:[--cell-size:60px] md:[--cell-size:75px] text-base sm:text-lg"
+                                        classNames={{
+                                            day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                                            day_today: "bg-accent text-accent-foreground",
+                                            month: "w-full",
+                                            table: "w-full border-collapse",
+                                            weekdays: "flex w-full mb-2",
+                                            weekday: "text-muted-foreground flex-1 text-center font-medium text-[0.8rem] sm:text-base select-none",
+                                            week: "flex w-full mt-1 sm:mt-2",
+                                            day: "relative flex-1 p-0 text-center flex items-center justify-center border border-zinc-900/30 dark:border-zinc-500/30 rounded-md mx-[1px]",
+                                            day_button: "font-bold text-lg sm:text-2xl w-full h-full",
+                                        }}
+                                        modifiers={{
+                                            hasEntry: (date) => {
+                                                const dayEntries = currentUserEntries.filter(e => format(e.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'));
+                                                if (dayEntries.length === 0) return false;
+                                                const totalMins = dayEntries.reduce((acc, e) => acc + parseHoursToMinutes(e.totalHours), 0);
+                                                return totalMins >= 480; // 8h = 480 min
+                                            },
+                                            partialEntry: (date) => {
+                                                const dayEntries = currentUserEntries.filter(e => format(e.date, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd'));
+                                                if (dayEntries.length === 0) return false;
+                                                const totalMins = dayEntries.reduce((acc, e) => acc + parseHoursToMinutes(e.totalHours), 0);
+                                                return totalMins > 0 && totalMins < 480;
+                                            },
+                                            dangerGap: (date) => {
+                                                if (hasEntry(date) || date >= new Date() || isWeekend(date)) return false;
+                                                let workDaysPassed = 0;
+                                                let current = new Date(date);
+                                                current.setHours(0, 0, 0, 0);
+                                                const now = new Date();
+                                                now.setHours(0, 0, 0, 0);
+                                                while (current < now) {
+                                                    if (!isWeekend(current)) workDaysPassed++;
+                                                    current.setDate(current.getDate() + 1);
+                                                }
+                                                return workDaysPassed >= 3;
+                                            },
+                                            warningGap: (date) => {
+                                                if (hasEntry(date) || date >= new Date() || isWeekend(date)) return false;
+                                                let workDaysPassed = 0;
+                                                let current = new Date(date);
+                                                current.setHours(0, 0, 0, 0);
+                                                const now = new Date();
+                                                now.setHours(0, 0, 0, 0);
+                                                while (current < now) {
+                                                    if (!isWeekend(current)) workDaysPassed++;
+                                                    current.setDate(current.getDate() + 1);
+                                                }
+                                                return workDaysPassed > 0 && workDaysPassed < 3;
                                             }
-                                            return workDaysPassed >= 3;
-                                        },
-                                        warningGap: (date) => {
-                                            if (hasEntry(date) || date >= new Date() || isWeekend(date)) return false;
-                                            let workDaysPassed = 0;
-                                            let current = new Date(date);
-                                            current.setHours(0, 0, 0, 0);
-                                            const now = new Date();
-                                            now.setHours(0, 0, 0, 0);
-                                            while (current < now) {
-                                                if (!isWeekend(current)) workDaysPassed++;
-                                                current.setDate(current.getDate() + 1);
-                                            }
-                                            return workDaysPassed > 0 && workDaysPassed < 3;
-                                        }
-                                    }}
-                                    modifiersClassNames={{
-                                        hasEntry: "bg-emerald-500 text-white border border-emerald-600 font-bold rounded-md",
-                                        warningGap: "bg-yellow-300 text-yellow-950 border border-yellow-400 font-bold rounded-md",
-                                        dangerGap: "bg-rose-600 text-white border border-rose-700 font-bold rounded-md"
-                                    }}
-                                    locale={ptBR}
-                                />
+                                        }}
+                                        modifiersClassNames={{
+                                            hasEntry: "bg-emerald-500 text-white border border-emerald-600 font-bold rounded-md",
+                                            partialEntry: "text-zinc-900 border border-emerald-400 font-bold rounded-md",
+                                            warningGap: "bg-yellow-300 text-yellow-950 border border-yellow-400 font-bold rounded-md",
+                                            dangerGap: "bg-rose-600 text-white border border-rose-700 font-bold rounded-md"
+                                        }}
+                                        modifiersStyles={{
+                                            partialEntry: { background: 'linear-gradient(135deg, #22c55e 75%, #fde047 75%)', color: '#18181b' }
+                                        }}
+                                        locale={ptBR}
+                                    />
+                                ) : (
+                                    <div className="w-full h-[320px] rounded-xl border bg-muted/30 animate-pulse" />
+                                )}
                             </div>
                         </CardContent>
                     </Card>
 
                     {/* History Sidebar */}
-                    <Card className="shadow-lg border-zinc-200/50 dark:border-zinc-800/50 w-full md:w-[350px] h-fit">
+                    <Card className="shadow-lg border-zinc-200/50 dark:border-zinc-800/50 w-full lg:w-[380px] xl:w-[420px] shrink-0 h-fit">
                         <CardHeader>
                             <CardTitle className="text-lg font-bold">Resumo do Mês</CardTitle>
                             <CardDescription>Seus últimos registros.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {entries.length === 0 ? (
+                            {currentUserEntries.length === 0 ? (
                                 <div className="text-center py-10 text-muted-foreground border-2 border-dashed rounded-lg text-sm bg-zinc-50/50 dark:bg-zinc-900/50">
                                     Nenhum apontamento registrado.
                                 </div>
@@ -418,7 +489,7 @@ export default function Dashboard() {
                                             originalDate: Date;
                                         }> = {};
 
-                                        entries.forEach(entry => {
+                                        currentUserEntries.forEach(entry => {
                                             const dateKey = format(entry.date, 'yyyy-MM-dd');
                                             if (!groupedEntries[dateKey]) {
                                                 groupedEntries[dateKey] = {
@@ -444,13 +515,15 @@ export default function Dashboard() {
                                             const cifList = Object.keys(group.cifs).sort();
 
                                             return (
-                                                <div key={format(group.date, 'yyyy-MM-dd')} className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors text-sm">
-                                                    <div className="flex flex-col gap-1 w-full overflow-hidden">
+                                                <div key={format(group.date, 'yyyy-MM-dd')} className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors text-sm gap-2">
+                                                    <div className="flex flex-col gap-1 min-w-0 flex-1 overflow-hidden">
                                                         <div className="font-semibold">{format(group.date, "dd/MM/yyyy")}</div>
 
                                                         {cifList.length === 1 ? (
-                                                            <div className="text-xs text-muted-foreground flex items-center gap-1 cursor-default">
-                                                                <Building className="w-3 h-3" /> {cifList[0]} • {formattedTotal}h
+                                                            <div className="text-xs text-muted-foreground flex items-center gap-1 cursor-default min-w-0">
+                                                                <Building className="w-3 h-3 shrink-0" />
+                                                                <span className="truncate flex-1" title={cifList[0]}>{cifList[0]}</span>
+                                                                <span className="shrink-0 whitespace-nowrap">• {formattedTotal}h</span>
                                                             </div>
                                                         ) : (
                                                             <div className="flex flex-wrap gap-1">
@@ -461,16 +534,17 @@ export default function Dashboard() {
                                                                     const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 
                                                                     return (
-                                                                        <Badge key={cif} variant="secondary" className="text-[10px] h-5 px-1.5 font-normal border bg-background flex items-center gap-1 cursor-default">
-                                                                            <Building className="w-2.5 h-2.5" />
-                                                                            {cif} • {timeStr}h
+                                                                        <Badge key={cif} variant="secondary" className="text-[10px] h-5 px-1.5 font-normal border bg-background flex items-center gap-1 cursor-default max-w-full">
+                                                                            <Building className="w-2.5 h-2.5 shrink-0" />
+                                                                            <span className="truncate max-w-[140px]" title={cif}>{cif}</span>
+                                                                            <span className="shrink-0">• {timeStr}h</span>
                                                                         </Badge>
                                                                     );
                                                                 })}
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="text-right shrink-0 ml-2">
+                                                    <div className="text-right shrink-0">
                                                         <div className="font-bold text-green-600 dark:text-green-400 whitespace-nowrap">
                                                             {formattedTotal}h
                                                         </div>
@@ -487,8 +561,13 @@ export default function Dashboard() {
             </div >
 
             {/* Entry Dialog */}
-            < Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen} >
-                <DialogContent className="w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-xl">
+            <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) {
+                    setTimeout(() => setSelectedDate(undefined), 200);
+                }
+            }}>
+                <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6 rounded-xl">
                     <DialogHeader>
                         <DialogTitle>Apontamentos - {selectedDate && format(selectedDate, "dd/MM/yyyy")}</DialogTitle>
                         <DialogDescription>
@@ -510,17 +589,21 @@ export default function Dashboard() {
                             <h3 className="text-sm font-medium">Registros do Dia:</h3>
                             {selectedDateEntries.map(entry => (
                                 <div key={entry.id} className="flex items-center justify-between p-3 border rounded bg-background text-sm">
-                                    <div>
+                                    <div className="flex-1 min-w-0 pr-3">
                                         <div className="flex items-center gap-2">
-                                            <p className="font-medium">{cifOptions.find(c => c.value === entry.cif)?.label || entry.cif}</p>
-                                            {entry.status === 'approved' ? (
-                                                <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-[10px]">Aprovado</Badge>
-                                            ) : (
-                                                <Badge variant="secondary" className="text-amber-600 bg-amber-100 dark:bg-amber-900/30 text-[10px]">Pendente</Badge>
-                                            )}
+                                            <p className="font-medium truncate" title={cifOptions.find(c => c.value === entry.cif)?.label || entry.cif}>
+                                                {cifOptions.find(c => c.value === entry.cif)?.label || entry.cif}
+                                            </p>
+                                            <div className="shrink-0 flex items-center">
+                                                {entry.status === 'approved' ? (
+                                                    <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-[10px] h-5 px-1.5 whitespace-nowrap">Aprovado</Badge>
+                                                ) : (
+                                                    <Badge variant="secondary" className="text-amber-600 bg-amber-100 dark:bg-amber-900/30 text-[10px] h-5 px-1.5 whitespace-nowrap">Pendente</Badge>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                                         <span className="font-bold">{entry.totalHours}h</span>
                                         <Button
                                             type="button"
@@ -545,47 +628,54 @@ export default function Dashboard() {
                     <Form {...form}>
                         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
 
-                            <FormField
-                                control={form.control}
-                                name="userName"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Funcionário</FormLabel>
-                                        <FormControl>
-                                            <div className="relative">
-                                                <Input {...field} readOnly className="bg-muted" />
-                                                <User className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                                            </div>
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <FormField
-                                control={form.control}
-                                name="cif"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Empresa (CIF)</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value}>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full overflow-hidden">
+                                <FormField
+                                    control={form.control}
+                                    name="userName"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Funcionário</FormLabel>
                                             <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Selecione a empresa" />
-                                                </SelectTrigger>
+                                                <div className="relative">
+                                                    <Input {...field} readOnly className="bg-muted" />
+                                                    <User className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                </div>
                                             </FormControl>
-                                            <SelectContent>
-                                                {cifOptions.map((option) => (
-                                                    <SelectItem key={option.value} value={option.value}>
-                                                        {option.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="cif"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Empresa (CIF)</FormLabel>
+                                            <FormControl>
+                                                <div className="relative w-full max-w-full min-w-0 overflow-hidden">
+                                                    <select
+                                                        className="flex h-10 w-full min-w-0 appearance-none rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 text-ellipsis overflow-hidden whitespace-nowrap"
+                                                        value={field.value}
+                                                        onChange={field.onChange}
+                                                    >
+                                                        <option value="" disabled hidden>Selecione a empresa</option>
+                                                        {cifOptions.map((option) => (
+                                                            <option key={option.value} value={option.value}>
+                                                                {option.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                                                    </div>
+                                                </div>
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
 
                             {/* Date field is hidden as it's set by calendar context */}
                             <FormField
@@ -601,48 +691,55 @@ export default function Dashboard() {
                                 )}
                             />
 
-                            <FormField
-                                control={form.control}
-                                name="type"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Tipo de Apontamento</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value}>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full overflow-hidden">
+                                <FormField
+                                    control={form.control}
+                                    name="type"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Tipo de Apontamento</FormLabel>
                                             <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Selecione o tipo" />
-                                                </SelectTrigger>
+                                                <div className="relative w-full max-w-full min-w-0 overflow-hidden">
+                                                    <select
+                                                        className="flex h-10 w-full min-w-0 appearance-none rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 text-ellipsis overflow-hidden whitespace-nowrap"
+                                                        value={field.value}
+                                                        onChange={field.onChange}
+                                                    >
+                                                        <option value="" disabled hidden>Selecione o tipo</option>
+                                                        {typeOptions.map((option) => (
+                                                            <option key={option.value} value={option.value}>
+                                                                {option.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                                                    </div>
+                                                </div>
                                             </FormControl>
-                                            <SelectContent>
-                                                {typeOptions.map((option) => (
-                                                    <SelectItem key={option.value} value={option.value}>
-                                                        {option.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
 
-                            <FormField
-                                control={form.control}
-                                name="totalHoursInput"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Horas Trabalhadas</FormLabel>
-                                        <FormControl>
-                                            <div className="relative">
-                                                <Input {...field} placeholder="Ex: 08:00 ou 8" />
-                                                <Clock className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                                            </div>
-                                        </FormControl>
-                                        <FormDescription>Informe o total de horas líquidas.</FormDescription>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                                <FormField
+                                    control={form.control}
+                                    name="totalHoursInput"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Horas Trabalhadas</FormLabel>
+                                            <FormControl>
+                                                <div className="relative">
+                                                    <Input {...field} placeholder="Ex: 08:00 ou 8" />
+                                                    <Clock className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                </div>
+                                            </FormControl>
+                                            <FormDescription className="text-xs">Informe o total de horas líquidas.</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
 
                             <FormField
                                 control={form.control}

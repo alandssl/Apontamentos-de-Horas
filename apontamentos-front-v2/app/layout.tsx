@@ -23,15 +23,20 @@ export const viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Apontamentos",
-  description: "Apontamentos de horas - Tecal Engenharia",
+  title: "Apontamentos Tecal",
+  description: "Sistema de apontamento de horas - Tecal Engenharia",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Apontamentos",
+    title: "Apontamentos Tecal",
   },
   formatDetection: {
     telephone: false,
+  },
+  icons: {
+    apple: "/icon-192x192.png",
+    icon: "/icon-192x192.png",
   },
 };
 
@@ -54,10 +59,10 @@ export default function RootLayout({
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                  }, function(err) {
-                    console.log('ServiceWorker registration failed: ', err);
+                  navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                    console.log('Service Worker registrado!');
+                  }).catch(function(err) {
+                    console.error('Erro ao registrar SW:', err);
                   });
                 });
               }
@@ -68,3 +73,5 @@ export default function RootLayout({
     </html>
   );
 }
+
+

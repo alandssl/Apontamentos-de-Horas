@@ -35,7 +35,7 @@ export default function AdminReportsPage() {
     const [reports, setReports] = useState<any[]>([]);
 
     useEffect(() => {
-        fetch("http://localhost:8080/horas")
+        fetch(`http://${window.location.hostname}:8080/horas`)
             .then(res => res.json())
             .then(data => {
                 const fetchedEntries = data

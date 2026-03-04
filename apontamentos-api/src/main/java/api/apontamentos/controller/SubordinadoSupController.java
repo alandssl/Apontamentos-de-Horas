@@ -1,12 +1,9 @@
 package api.apontamentos.controller;
 
-import java.util.List;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,15 +23,15 @@ public class SubordinadoSupController {
 
     private final SubordinadoSupService service;
 
-    @GetMapping
-    public List<SubordinadoSup> listarTodos(){
-        return service.buscarTodos();
-    }
+    // @GetMapping
+    // public List<SubordinadoSup> listarTodos(){
+    //     return service.buscarTodos();
+    // }
 
-    @GetMapping("/{id}")
-    public List<SubordinadoSup> listarPorId(@PathVariable Long id){
-        return service.buscarPeloId(id);
-    }   
+    // @GetMapping("/{id}")
+    // public List<SubordinadoSup> listarPorId(@PathVariable Long id){
+    //     return service.buscarPeloId(id);
+    // }   
 
     @PostMapping
     public ResponseEntity<SubordinadoSup> salvarSubordinado(@RequestBody SubordinadoSup subsup){

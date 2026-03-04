@@ -2,7 +2,6 @@ package api.apontamentos.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -123,4 +122,5 @@ public class HoraApontamentosService {
     //     return repository.findByDataApontamentoIdAndAtivoTrue(data);
     // }
 
+    
 }

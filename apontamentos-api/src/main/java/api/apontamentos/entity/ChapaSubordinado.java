@@ -1,25 +1,30 @@
 package api.apontamentos.entity;
 
+import java.time.LocalDate;
+
 import org.hibernate.annotations.Immutable;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
+
 @Entity
-@Table(name = "corpore_gccusto")
 @Immutable
+@Table(name = "corpore_pfunc")
 @Getter
 @Setter
-public class Cifs {
+public class ChapaSubordinado {
 
     @Id
-    private String codccusto;
-    // @Id
-    private String codcoligada;
+    private String chapa;
     private String nome;
-    private String ativo;
-    private String tipocif;
+    @Column(name = "CODSITUACAO")
+    private String codSituacao;
+    @Column(name = "DATADEMISSAO")
+    private LocalDate dataDemissao;
+
 }

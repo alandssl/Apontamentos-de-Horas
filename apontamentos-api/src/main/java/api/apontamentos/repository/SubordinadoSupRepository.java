@@ -11,4 +11,5 @@ import api.apontamentos.entity.SubordinadoSup;
 public interface SubordinadoSupRepository extends JpaRepository<SubordinadoSup, Long> {
 
     List<SubordinadoSup> findByIdAndDataExclusaoNull(Long id);
+    List<SubordinadoSup> findBySuperiorId_IdAndDataExclusaoNull(Long id);
 }

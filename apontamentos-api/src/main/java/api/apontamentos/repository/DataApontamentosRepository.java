@@ -4,7 +4,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -20,5 +19,9 @@ public interface DataApontamentosRepository extends JpaRepository<DataApontament
     DataApontamentos findByDataAprovacaoIsNull(LocalDateTime dataAprovacao);
 
     DataApontamentos findByDataRejeitadaIsNull(LocalDateTime dataRejeitada);
+
+    DataApontamentos findByChapaAndDataRejeitadaIsNullAndDataAprovacaoIsNullAndData(LocalDate data, String chapa);
+
+    List<DataApontamentos> findByDataBetweenAndChapaAndDataExclusaoIsNullAndDataAprovacaoIsNull(LocalDate dataInicio, LocalDate dataFim, String chapa);
 
 }

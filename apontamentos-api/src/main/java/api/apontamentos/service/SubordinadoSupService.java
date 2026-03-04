@@ -16,9 +16,9 @@ public class SubordinadoSupService {
 
     private final SubordinadoSupRepository repository;
 
-    public List<SubordinadoSup> buscarTodos(){
-        return repository.findAll();
-    }
+    // public List<SubordinadoSup> buscarTodos(){
+    //     return repository.findAll();
+    // }
 
     public List<SubordinadoSup> buscarPeloId(Long id){
         return repository.findByIdAndDataExclusaoNull(id);
@@ -36,4 +36,8 @@ public class SubordinadoSupService {
 
         repository.save(subSup);
     }
+
+    // public List<SubordinadoSup> buscarPorSuperiorId(Long superiorId) {
+    //     return repository.findBySuperiorId_IdAndDataExclusaoNull(superiorId);
+    // }
 }

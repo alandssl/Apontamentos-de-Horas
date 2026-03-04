@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { UserPlus, User, Loader2, CheckCircle2, FileText, Settings, ShieldAlert } from "lucide-react";
+import { UserPlus, User, Loader2, CheckCircle2, FileText, Settings, ShieldAlert, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import bcrypt from "bcryptjs";
 
 interface Usuario {
@@ -33,13 +34,75 @@ export default function AdminUsersPage() {
     const [newRelatorio, setNewRelatorio] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
 
+    const [editingUser, setEditingUser] = useState<Usuario | null>(null);
+    const [editNome, setEditNome] = useState("");
+    const [editEmail, setEditEmail] = useState("");
+    const [editChapa, setEditChapa] = useState("");
+    const [editSenha, setEditSenha] = useState("");
+    const [editAprovador, setEditAprovador] = useState(false);
+    const [editRelatorio, setEditRelatorio] = useState(false);
+    const [isUpdating, setIsUpdating] = useState(false);
+
+    const handleEditClick = (user: Usuario) => {
+        setEditingUser(user);
+        setEditNome(user.nome || "");
+        setEditEmail(user.usuario || "");
+        setEditChapa(user.chapa || "");
+        setEditAprovador(user.aprovador || false);
+        setEditRelatorio(user.relatorio || false);
+        setEditSenha("");
+    };
+
+    const handleUpdateUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingUser) return;
+        setIsUpdating(true);
+
+        const persistUpdate = async (hashedObj: any) => {
+            try {
+                const resp = await fetch(`http://${window.location.hostname}:8080/user/atualizar/${editingUser.id}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(hashedObj)
+                });
+                if (!resp.ok) throw new Error("Erro ao atualizar usuário");
+                toast.success("Usuário atualizado com sucesso!");
+                setEditingUser(null);
+                fetchUsers();
+            } catch (err: any) {
+                toast.error(err.message || "Erro na atualização");
+            } finally {
+                setIsUpdating(false);
+            }
+        };
+
+        if (editSenha) {
+            bcrypt.hash(editSenha, 10, (err, hash) => {
+                if (err) {
+                    toast.error("Erro ao gerar hash");
+                    setIsUpdating(false);
+                    return;
+                }
+                persistUpdate({
+                    nome: editNome, usuario: editEmail, chapa: editChapa,
+                    aprovador: editAprovador, relatorio: editRelatorio, senha: hash
+                });
+            });
+        } else {
+            persistUpdate({
+                nome: editNome, usuario: editEmail, chapa: editChapa,
+                aprovador: editAprovador, relatorio: editRelatorio, senha: null
+            });
+        }
+    };
+
     useEffect(() => {
         fetchUsers();
     }, []);
 
     const fetchUsers = async () => {
         try {
-            const res = await fetch("http://localhost:8080/user");
+            const res = await fetch(`http://${window.location.hostname}:8080/user`);
             if (res.ok) {
                 const data = await res.json();
                 setUsers(data);
@@ -62,7 +125,7 @@ export default function AdminUsersPage() {
         });
 
         try {
-            const resp = await fetch("http://localhost:8080/user/salvar", {
+            const resp = await fetch(`http://${window.location.hostname}:8080/user/salvar`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -196,9 +259,14 @@ export default function AdminUsersPage() {
                                         </div>
                                     </div>
                                     <div className="flex gap-4 sm:flex-col sm:gap-1 text-sm text-zinc-500 text-right shrink-0">
-                                        <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded text-xs w-fit sm:ml-auto">
-                                            Chapa: {user.chapa}
-                                        </span>
+                                        <div className="flex items-center gap-2 sm:ml-auto">
+                                            <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded text-xs w-fit">
+                                                Chapa: {user.chapa}
+                                            </span>
+                                            <Button variant="ghost" size="icon" onClick={() => handleEditClick(user)} className="h-8 w-8 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
+                                                <Pencil className="w-4 h-4" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -211,6 +279,58 @@ export default function AdminUsersPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <Dialog open={!!editingUser} onOpenChange={(val) => !val && setEditingUser(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Editar Usuário</DialogTitle>
+                        <DialogDescription>Altere as informações do usuário conforme necessário.</DialogDescription>
+                    </DialogHeader>
+                    {editingUser && (
+                        <form onSubmit={handleUpdateUser} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>Nome Completo</Label>
+                                <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} required />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>E-mail Corporativo</Label>
+                                <Input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} required type="email" />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Chapa</Label>
+                                    <Input value={editChapa} onChange={(e) => setEditChapa(e.target.value)} required />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Nova Senha</Label>
+                                    <Input value={editSenha} onChange={(e) => setEditSenha(e.target.value)} type="password" placeholder="(Deixe em branco p/ manter)" />
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 pt-3 mt-2 border-t">
+                                <h4 className="text-sm font-medium">Permissões no Sistema</h4>
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex items-center space-x-2 bg-emerald-50 dark:bg-emerald-950/30 p-2 rounded-md border border-emerald-100 dark:border-emerald-800">
+                                        <Checkbox id="edit-aprovador" checked={editAprovador} onCheckedChange={(c) => setEditAprovador(c as boolean)} />
+                                        <Label htmlFor="edit-aprovador" className="text-sm font-medium cursor-pointer">É Gestor / Aprovador</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2 bg-blue-50 dark:bg-blue-950/30 p-2 rounded-md border border-blue-100 dark:border-blue-800">
+                                        <Checkbox id="edit-relatorio" checked={editRelatorio} onCheckedChange={(c) => setEditRelatorio(c as boolean)} />
+                                        <Label htmlFor="edit-relatorio" className="text-sm font-medium cursor-pointer">Acesso a Relatórios</Label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <Button type="submit" className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white" disabled={isUpdating}>
+                                {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                {isUpdating ? 'Atualizando...' : 'Salvar Alterações'}
+                            </Button>
+                        </form>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

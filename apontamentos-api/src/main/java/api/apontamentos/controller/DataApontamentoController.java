@@ -1,5 +1,6 @@
 package api.apontamentos.controller;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import api.apontamentos.entity.DataApontamentos;
@@ -76,8 +78,20 @@ public class DataApontamentoController {
     //     return ResponseEntity.ok(dataId);
     // }
 
-    // @PutMapping("/{id}/aprovar-chapa")
+    @PutMapping("/{id}/aprovar-chapa")
+    public ResponseEntity<DataApontamentos> aprovarChapa(@PathVariable Long id) {
+        DataApontamentos aprovada = service.buscarPorDataEChapa(id);
+        return ResponseEntity.ok(aprovada);
+    }
 
-    
+    @GetMapping("/entre-datas")
+    public ResponseEntity<List<DataApontamentos>> buscarPorDataEntre(
+            @RequestParam("dataInicio") LocalDate dataInicio,
+            @RequestParam("dataFim") LocalDate dataFim,
+            @RequestParam("chapa") String chapa
+        ) {
+        List<DataApontamentos> datas = service.buscarPorDataEntre(dataInicio, dataFim, chapa);
+        return ResponseEntity.ok(datas);
+    }
 
 }

@@ -61,33 +61,56 @@ export default function AdminAprovalPage() {
         getSessionData().then(session => {
             if (session?.userId) {
                 setUserId(session.userId);
+
+                // Primeiramente carrega os usuarios gerais para ter as chapas e nomes
+                fetch(`http://${window.location.hostname}:8080/user`)
+                    .then(res => res.json())
+                    .then(allUsersData => {
+                        // Agora busca quem sao os subordinados daquele gestor
+                        fetch(`http://${window.location.hostname}:8080/chapa-subordinado/${session.userId}`)
+                            .then(res => res.json())
+                            .then(subSupData => {
+                                const validSubSup = Array.isArray(subSupData) ? subSupData : [];
+                                const allowedChapas = validSubSup.map((s: any) => s.chapa).filter(Boolean);
+
+                                const allowedUsers = allUsersData.filter((u: any) =>
+                                    allowedChapas.includes(u.chapa)
+                                );
+
+                                const allowedNames = new Set(allowedUsers.map((u: any) => u.nome || u.usuario).filter(Boolean));
+
+                                // Busca todos apontamentos e filtra apenas pros nomes dos subordinados
+                                fetch(`http://${window.location.hostname}:8080/horas`)
+                                    .then(res => res.json())
+                                    .then(data => {
+                                        const fetchedEntries = data.map((h: any) => ({
+                                            id: String(h.id),
+                                            dataId: String(h.dataApontamentoId?.id),
+                                            date: new Date(h.dataApontamentoId?.data || new Date()),
+                                            cif: h.detalhe || 'Indefinido',
+                                            totalHours: h.horasEfetivas,
+                                            status: h.dataApontamentoId?.dataAprovacao ? 'approved' : 'pending',
+                                            type: String(h.tipoId?.id),
+                                            description: h.detalhe,
+                                            userName: h.usuarioId?.nome || 'Usuário'
+                                        })).filter((e: any) => allowedNames.has(e.userName));
+
+                                        setEntries(fetchedEntries);
+                                    })
+                                    .catch(err => console.error("Error fetching horas", err));
+                            })
+                            .catch(err => console.error("Error fetching subordinados", err));
+                    })
+                    .catch(err => console.error("Error fetching usuarios", err));
             }
         });
-
-        fetch("http://localhost:8080/horas")
-            .then(res => res.json())
-            .then(data => {
-                const fetchedEntries = data.map((h: any) => ({
-                    id: String(h.id),
-                    dataId: String(h.dataApontamentoId?.id),
-                    date: new Date(h.dataApontamentoId?.data || new Date()),
-                    cif: h.detalhe || 'Indefinido',
-                    totalHours: h.horasEfetivas,
-                    status: h.dataApontamentoId?.dataAprovacao ? 'approved' : 'pending',
-                    type: String(h.tipoId?.id),
-                    description: h.detalhe,
-                    userName: h.usuarioId?.nome || 'Usuário'
-                }));
-                setEntries(fetchedEntries);
-            })
-            .catch(err => console.error("Error fetching horas", err));
     }, []);
 
     const handleApprove = async (id: string, dataId: string, userName: string) => {
         if (!userId) return toast.error("Usuário aprovador não encontrado.", { description: "Por favor, faça login novamente." });
 
         try {
-            const response = await fetch(`http://localhost:8080/data/${dataId}/aprovar`, {
+            const response = await fetch(`http://${window.location.hostname}:8080/data/${dataId}/aprovar`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ aprovadorId: Number(userId) })
@@ -106,7 +129,7 @@ export default function AdminAprovalPage() {
         if (!userId) return toast.error("Usuário não identificado.");
 
         try {
-            const response = await fetch(`http://localhost:8080/data/${dataId}/rejeitar`, {
+            const response = await fetch(`http://${window.location.hostname}:8080/data/${dataId}/rejeitar`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ rejeitadorId: Number(userId) })
@@ -127,7 +150,7 @@ export default function AdminAprovalPage() {
 
         try {
             await Promise.all(pendingEntries.map(e =>
-                fetch(`http://localhost:8080/data/${e.dataId}/aprovar`, {
+                fetch(`http://${window.location.hostname}:8080/data/${e.dataId}/aprovar`, {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ aprovadorId: Number(userId) })
@@ -141,25 +164,7 @@ export default function AdminAprovalPage() {
         }
     };
 
-    const handleApproveAllGlobal = async () => {
-        if (!userId) return toast.error("Usuário não identificado.");
-        const pendingEntries = entries.filter(e => e.status === 'pending');
 
-        try {
-            await Promise.all(pendingEntries.map(e =>
-                fetch(`http://localhost:8080/data/${e.dataId}/aprovar`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ aprovadorId: Number(userId) })
-                })
-            ));
-
-            setEntries(prev => prev.map(e => ({ ...e, status: 'approved' })));
-            toast.success(`Todos os apontamentos gerais foram aprovados!`);
-        } catch (error) {
-            toast.error("Erro ao aprovar apontamentos.");
-        }
-    };
 
     // Agrupar apontamentos por pessoa
     const userNames = Array.from(new Set(entries.map(e => e.userName)));
@@ -224,14 +229,6 @@ export default function AdminAprovalPage() {
                             Gerencie os apontamentos agrupados de cada membro da equipe.
                         </CardDescription>
                     </div>
-                    {entries.some(e => e.status === 'pending') && (
-                        <Button
-                            onClick={handleApproveAllGlobal}
-                            className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
-                        >
-                            Aprovar Todos do Setor
-                        </Button>
-                    )}
                 </CardHeader>
                 <CardContent>
                     {groupedData.length === 0 ? (

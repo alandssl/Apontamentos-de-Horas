@@ -8,8 +8,10 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 import api.apontamentos.entity.DataApontamentos;
+import api.apontamentos.entity.Usuarios;
 import api.apontamentos.repository.DataApontamentosRepository;
 import api.apontamentos.repository.HoraApontamentosRepository;
+import api.apontamentos.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -17,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 public class DataApontamentosService {
 
     private final DataApontamentosRepository repository;
+    private final UsuarioRepository usuarioRepository;
     private final HoraApontamentosRepository horaRepository;
 
     // Salva um novo apontamento, definindo o campo "ativo" como true
@@ -107,6 +110,22 @@ public class DataApontamentosService {
 
     public List<DataApontamentos> buscarPorDataEntre(LocalDate dataInicio, LocalDate dataFim, String chapa) {
         return repository.findByDataBetweenAndChapaAndDataExclusaoIsNullAndDataAprovacaoIsNull(dataInicio, dataFim, chapa);
+    }
+
+    public List<Long> aprovarPorListaDeIds(List<Long> ids, Long userId) {
+
+        Usuarios usuario = usuarioRepository.findById(userId).orElseThrow(() -> new RuntimeException("Usuário não encontrado com id: " + userId));
+
+        for (Long idStr : ids) {
+            DataApontamentos dataAprovada = repository.findById(idStr)
+            .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + idStr));
+            if (dataAprovada.getDataAprovacao() == null) {
+                dataAprovada.setDataAprovacao(LocalDateTime.now());
+                dataAprovada.setAprovadorId(usuario);
+                repository.save(dataAprovada);
+            }
+        }
+        return ids;
     }
 
 

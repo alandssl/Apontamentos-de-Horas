@@ -59,6 +59,9 @@ public class HoraApontamentos {
 
     @Column
     private Boolean ativo;
+
+    @Column
+    private String cif;
     
 
     @PrePersist

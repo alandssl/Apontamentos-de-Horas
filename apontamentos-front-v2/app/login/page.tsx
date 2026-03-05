@@ -55,14 +55,14 @@ const Login = () => {
         <form action={formAction}>
           <CardContent className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium">E-mail Corporativo</Label>
+              <Label htmlFor="email" className="text-sm font-medium">Login Corporativo</Label>
               <div className="relative group">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 group-focus-within:text-emerald-500 transition-colors" />
                 <Input
                   id="email"
                   name="email"
                   type="text"
-                  placeholder="seu.nome@tecal.com.br, ou seu login"
+                  placeholder="seu.nome de seu login"
                   className="pl-10 h-11 bg-zinc-50/50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
@@ -84,7 +84,7 @@ const Login = () => {
                   id="password"
                   name="password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder=""
                   className="pl-10 h-11 bg-zinc-50/50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}

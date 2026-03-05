@@ -16,4 +16,5 @@ public class HoraApontamentoDTO {
     private Long usuarioId;
     private Boolean ativo;
     private String chapa;
+    private String cif;
 }

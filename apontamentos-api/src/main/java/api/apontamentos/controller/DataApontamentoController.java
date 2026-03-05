@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import api.apontamentos.dto.DataApontamentosDTO;
 import api.apontamentos.entity.DataApontamentos;
 import api.apontamentos.service.DataApontamentosService;
 import lombok.RequiredArgsConstructor;
@@ -93,5 +94,11 @@ public class DataApontamentoController {
         List<DataApontamentos> datas = service.buscarPorDataEntre(dataInicio, dataFim, chapa);
         return ResponseEntity.ok(datas);
     }
-
+    @PutMapping("/multiplas-datas")
+    public ResponseEntity<List<Long>> aprovarPorListaDeIds(
+            @RequestBody DataApontamentosDTO dto
+        ) {
+        List<Long> datas = service.aprovarPorListaDeIds(dto.getIds(), dto.getUserId());
+        return ResponseEntity.ok(datas);
+    }
 }

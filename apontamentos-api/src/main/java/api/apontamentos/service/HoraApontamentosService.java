@@ -60,6 +60,7 @@ public class HoraApontamentosService {
         hora.setTipoId(tipo);
         hora.setDataApontamentoId(nova);
         hora.setAtivo(true);
+        hora.setCif(dto.getCif());
 
         return repository.save(hora);
     }

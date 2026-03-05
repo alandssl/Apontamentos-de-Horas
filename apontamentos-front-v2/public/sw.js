@@ -6,7 +6,7 @@ const STATIC_ASSETS = [
     '/icon-192x192.png',
     '/icon-512x512.png',
     '/tecalfoto.png',
-    '/manifest.webmanifest',
+    // '/manifest.webmanifest',
 ];
 
 // Install: pré-cache dos assets estáticos

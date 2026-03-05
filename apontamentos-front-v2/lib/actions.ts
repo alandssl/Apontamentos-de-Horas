@@ -29,7 +29,8 @@ export async function loginAction(prevState: any, formData: FormData) {
         if (user.senha === password) {
           isPasswordValid = true; // Legacy plain text
         } else if (user.senha && user.senha.startsWith("$2b$")) {
-          isPasswordValid = await bcrypt.compare(password, user.senha);
+          // isPasswordValid = await bcrypt.compare(password, user.senha);
+          isPasswordValid = password === user.senha;
         }
 
         if (!isPasswordValid) {
@@ -53,7 +54,7 @@ export async function loginAction(prevState: any, formData: FormData) {
       }
     } else {
       console.error("Falha ao se conectar com banco de dados na validação");
-      return { error: "Erro de comunicação com o servidor de validação" };
+      return { error: "Credenciais inválidas" };
     }
   } catch (err) {
     console.error("Erro interno ao validar login:", err);

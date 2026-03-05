@@ -23,8 +23,8 @@ public class ChapaSubordinadoService {
     private final UsuarioRepository usuarioRepository;
 
     public List<ChapaSubordinado> buscarChapaPorSuperior(Long id){
-        Usuarios usuarios = usuarioRepository.findById(id).orElse(null);
-        List<SubordinadoSup> subordinados = subordinadoSupRepository.findBySuperiorId_IdAndDataExclusaoNull(usuarios.getId());
+        Usuarios usuario = usuarioRepository.findById(id).orElse(null);
+        List<SubordinadoSup> subordinados = subordinadoSupRepository.findBySuperiorId_IdAndDataExclusaoNull(usuario.getId());
         List<String> chapas = subordinados.stream().map(SubordinadoSup::getSubordinadoChapa).toList();
         System.out.println("Chapas encontradas: " + chapas);
         List<ChapaSubordinado> chapaSubordinados = repository.findByChapaIn(chapas);

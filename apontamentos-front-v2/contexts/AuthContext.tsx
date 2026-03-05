@@ -126,7 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userPassword: string;
       } = await response.json();
 
-      const isPasswordValid = await bcrypt.compare(password, data.userPassword);
+      // const isPasswordValid = await bcrypt.compare(password, data.userPassword);
+      const isPasswordValid = password === data.userPassword;
       if (!isPasswordValid) {
         throw new Error("Senha incorreta");
       }

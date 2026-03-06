@@ -42,12 +42,15 @@ public class HoraApontamentosService {
             novaData.setAtivo(true);
             novaData.setUsuarioId(usuario);
             novaData.setChapa(dto.getChapa());
+            System.out.println("novaData: " + novaData.getId() + " chapa: " + novaData.getChapa() + " data: " + novaData.getData());
 
             nova = dataRepository.save(novaData);
         }else if(dataExiste.getAprovadorId() != null && dataExiste.getDataAprovacao() != null){
             throw new RuntimeException("Apontamento já aprovado, não é possível adicionar horas a essa data.");
         } else {
             nova = dataExiste;
+
+
         }
 
         Tipo tipo = tipoRepository.findById(dto.getTipoId())
@@ -61,7 +64,11 @@ public class HoraApontamentosService {
         hora.setDataApontamentoId(nova);
         hora.setAtivo(true);
         hora.setCif(dto.getCif());
-
+        System.out.println("id: " + hora.getId() + " dataId: " + hora.getDataApontamentoId().getId() + " usuarioId: " + hora.getUsuarioId().getId() + " tipoId: "
+         + hora.getTipoId().getId() + " horas: " + hora.getHorasEfetivas() + 
+         " detalhe: " + hora.getDetalhe() + " chapa: " + nova.getChapa() + 
+         " data: " + nova.getData());
+         
         return repository.save(hora);
     }
 

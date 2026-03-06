@@ -4,9 +4,8 @@ import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { sessionOptions, SessionData } from "@/lib/session";
 import { redirect } from "next/navigation";
-import bcrypt from "bcryptjs";
 
-export async function loginAction(prevState: any, formData: FormData) {
+export async function loginAction(_: unknown, formData: FormData) {
   const rawEmail = formData.get("email")?.toString() || "";
   const rawPassword = formData.get("password")?.toString() || "";
 
@@ -43,8 +42,9 @@ export async function loginAction(prevState: any, formData: FormData) {
         );
 
         session.userId = String(user.id);
-        session.username = user.nome || user.usuario;
         session.isLoggedIn = true;
+        session.chapa = user.chapa;
+        session.nome = user.nome;
 
         // Verifica se aprovador é true ou a string "True" ou valor válido que identifica admin
         session.isAdmin = user.aprovador === true || String(user.aprovador).toLowerCase() === "true";
@@ -87,9 +87,10 @@ export async function getSessionData() {
   // "Only plain objects can be passed to Client Components from Server Components"
   return {
     userId: session.userId,
-    username: session.username,
     isLoggedIn: session.isLoggedIn,
     isAdmin: session.isAdmin,
+    chapa: session.chapa,
+    nome: session.nome,
   };
 }
 

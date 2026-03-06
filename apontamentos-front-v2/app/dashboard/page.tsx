@@ -61,13 +61,6 @@ import { toast } from "sonner";
 import { id, ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useAuth } from "@/contexts/AuthContext";
-import {
   Combobox,
   ComboboxContent,
   ComboboxEmpty,
@@ -75,6 +68,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox";
+import { useDebounce } from "@/lib/useDebounce";
 
 const formSchema = z.object({
   userName: z.string().min(1, "Nome é obrigatório"),
@@ -98,6 +92,12 @@ type Entry = z.infer<typeof formSchema> & {
   id: string;
   totalHours: string; // Formatting ensured on submit
   status: EntryStatus;
+  date: Date;
+  chapa: string;
+  cif: string;
+  type?: string;
+  description?: string;
+  user: { nome: string; id: string };
 };
 
 export default function Dashboard() {
@@ -118,7 +118,27 @@ export default function Dashboard() {
   const [employees, setEmployees] = useState<string[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [isMounted, setIsMounted] = useState(false);
-  const [loggedUser, setLoggedUser] = useState<string>("");
+
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebounce(query, cifOptions, 400);
+  const [debouncedQueryValues, setDebouncedQueryValues] =
+    useState(debouncedQuery);
+
+  const handleDebouncedInputChange = (
+    value: string,
+    OnchangeForm: (...event: any[]) => void,
+  ) => {
+    setQuery(value); // Update the query state immediately
+    OnchangeForm(value); // Update the form value immediately
+  };
+
+  useEffect(() => {
+    setDebouncedQueryValues(debouncedQuery);
+  }, [debouncedQuery]);
+
+  useEffect(() => {
+    setDebouncedQueryValues(cifOptions.slice(0, 100));
+  }, [cifOptions, isDialogOpen]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -140,75 +160,108 @@ export default function Dashboard() {
       if (session?.isAdmin) {
         setIsAdmin(true);
       }
-      if (session?.username) {
-        form.setValue("userName", session.username);
+      if (session?.nome) {
+        form.setValue("userName", session.chapa + " - " + session.nome);
       }
 
       // Fetch Employees
-      fetch(`http://${window.location.hostname}:8080/user`)
-        .then((res) => res.json())
-        .then((allUsersData) => {
-          setAllUsers(allUsersData);
-          if (session?.isAdmin && session?.userId) {
-            fetch(
-              `http://${window.location.hostname}:8080/chapa-subordinado/${session.userId}`,
-            )
-              .then((res) => res.json())
-              .then((subSupData) => {
-                console.log("session");
-                console.log(subSupData);
-                const validSubSup = Array.isArray(subSupData) ? subSupData : [];
-                const allowedChapas = validSubSup
-                  .map((s: any) => s.chapa)
-                  .filter(Boolean);
+      if (session?.isAdmin && session?.userId) {
+        fetch(
+          `http://${window.location.hostname}:8080/chapa-subordinado/${session.userId}`,
+        )
+          .then((res) => res.json())
+          .then((subSupData) => {
+            // const validSubSup = Array.isArray(subSupData) ? subSupData : [];
+            const validSubSup = subSupData;
 
-                const selfUser = allUsersData.find(
-                  (u: any) => String(u.id) === String(session.userId),
-                );
-
-                console.log(selfUser);
-                setEmployees(
-                  Array.from(
-                    new Set(
-                      validSubSup.map((u: any) => u.nome).filter(Boolean),
-                    ),
-                  ),
-                );
-                setEmployees((prev) => [...prev, selfUser.nome]);
-
-                // }
-              })
-              .catch((err) => {
-                console.error("Error fetching subordinados", err);
-                // Se falhar a busca (ex: rota retornar 404), colocar apenas o usuario atual
-                const selfUser = allUsersData.find(
-                  (u: any) => String(u.id) === String(session.userId),
-                );
-                setEmployees(
-                  selfUser
-                    ? [selfUser.nome || selfUser.usuario].filter(Boolean)
-                    : [session.username].filter(Boolean),
-                );
-              });
-          } else {
             setEmployees(
               Array.from(
                 new Set(
-                  allUsersData
-                    .map((u: any) => u.nome || u.usuario)
+                  validSubSup
+                    .map(
+                      (u: { nome: string; chapa: string }) =>
+                        u.chapa + " - " + u.nome,
+                    )
                     .filter(Boolean),
                 ),
               ),
             );
-          }
-        })
-        .catch((err) => console.error("Error fetching usuarios", err));
+
+            setEmployees((prev) => [
+              ...prev,
+              session.chapa + " - " + session.nome,
+            ]);
+          })
+          .catch((err) => {
+            console.error("Error fetching subordinados", err);
+          });
+      }
+
+      // // Fetch Employees
+      // fetch(`http://${window.location.hostname}:8080/user`)
+      //   .then((res) => res.json())
+      //   .then((allUsersData) => {
+      //     setAllUsers(allUsersData);
+      //     if (session?.isAdmin && session?.userId) {
+      //       fetch(
+      //         `http://${window.location.hostname}:8080/chapa-subordinado/${session.userId}`,
+      //       )
+      //         .then((res) => res.json())
+      //         .then((subSupData) => {
+      //           console.log("session");
+      //           console.log(subSupData);
+      //           const validSubSup = Array.isArray(subSupData) ? subSupData : [];
+      //           const allowedChapas = validSubSup
+      //             .map((s: any) => s.chapa)
+      //             .filter(Boolean);
+
+      //           const selfUser = allUsersData.find(
+      //             (u: any) => String(u.id) === String(session.userId),
+      //           );
+
+      //           console.log(selfUser);
+      //           setEmployees(
+      //             Array.from(
+      //               new Set(
+      //                 validSubSup.map((u: any) => u.nome).filter(Boolean),
+      //               ),
+      //             ),
+      //           );
+      //           setEmployees((prev) => [...prev, selfUser.nome]);
+
+      //           // }
+      //         })
+      //         .catch((err) => {
+      //           console.error("Error fetching subordinados", err);
+      //           // Se falhar a busca (ex: rota retornar 404), colocar apenas o usuario atual
+      //           const selfUser = allUsersData.find(
+      //             (u: any) => String(u.id) === String(session.userId),
+      //           );
+      //           setEmployees(
+      //             selfUser
+      //               ? [selfUser.nome || selfUser.usuario].filter(Boolean)
+      //               : [session.username].filter(Boolean),
+      //           );
+      //         });
+      //     } else {
+      //       setEmployees(
+      //         Array.from(
+      //           new Set(
+      //             allUsersData
+      //               .map((u: any) => u.nome || u.usuario)
+      //               .filter(Boolean),
+      //           ),
+      //         ),
+      //       );
+      //     }
+      //   })
+      //   .catch((err) => console.error("Error fetching usuarios", err));
 
       // Fetch Apontamentos
       fetch(`http://${window.location.hostname}:8080/horas`)
         .then((res) => res.json())
         .then((data) => {
-          const fetchedEntries = data.map((h: any) => ({
+          const fetchedEntries: [Entry] = data.map((h: any) => ({
             id: String(h.id),
             date: new Date(
               h.dataApontamentoId?.data
@@ -216,19 +269,23 @@ export default function Dashboard() {
                 : new Date(),
             ),
             cif: h.cif || "Indefinido",
+            chapa: h.dataApontamentoId?.chapa,
             totalHours: h.horasEfetivas,
-            totalHoursInput: h.horasEfetivas,
             status: h.dataApontamentoId?.dataAprovacao ? "approved" : "pending",
-            type: String(h.tipoId?.id),
+            type: String(h.tipoId?.tipo) || "Indefinido",
             description: h.detalhe || "Indefinido",
-            userName: h.usuarioId?.nome || "Usuário",
+            user: {
+              nome: h.usuarioId?.nome || "Indefinido",
+              id: String(h.usuarioId?.id),
+            },
           }));
           setEntries(fetchedEntries);
         })
         .catch((err) => console.error("Error fetching horas", err));
 
       // Fetch CIFs
-      // fetch(`http://${window.location.hostname}:8080/cif/usuario/${session?.userId}`)
+      // fetch();
+      // `http://${window.location.hostname}:8080/cif/usuario/${session?.userId}`,
       fetch(`http://${window.location.hostname}:8080/cif/todos`)
         .then((res) => res.json())
         .then((data) => {
@@ -285,8 +342,14 @@ export default function Dashboard() {
 
   const watchedUserName = form.watch("userName");
   const currentUserEntries = entries.filter(
-    (e) => e.userName === watchedUserName,
+    (e) => e.chapa === watchedUserName.split(" - ")[0],
   );
+
+  // useEffect(() => {
+  //   console.log(entries);
+  //   console.log(currentUserEntries);
+  //   console.log(watchedUserName);
+  // }, [currentUserEntries]);
 
   // Calculate stats for the selected date
   const selectedDateEntries = currentUserEntries.filter(
@@ -311,6 +374,7 @@ export default function Dashboard() {
       const [h, m] = formattedHours.split(":");
       formattedHours = `${h.padStart(2, "0")}:${m}`;
     }
+    const session = await getSessionData();
 
     const newEntry: Entry = {
       ...values,
@@ -318,27 +382,31 @@ export default function Dashboard() {
       id: Math.random().toString(36).substr(2, 9),
       totalHours: formattedHours,
       status: "pending",
+      chapa: values.userName.split(" - ")[0],
+      user: {
+        nome: session.nome!,
+        id: session.userId!,
+      },
+      cif: values.cif.split(" - ")[0],
+      date: values.date,
+      description: values.description,
+      type: values.type,
     };
 
-    const session = await getSessionData();
-    console.log(values.date);
-    console.log(format(values.date, "yyyy-MM-dd"));
     try {
       // Find the correct references for the API POST
       const tipoObj = typeOptions.find((t) => t.value === values.type);
 
       // Call API
-      const adminSelectedUser = allUsers.find(
-        (u) => (u.nome || u.usuario) === values.userName,
-      );
+
       console.log({
         horasEfetivas: formattedHours,
-        cif: values.cif, // CIF
+        cif: values.cif.split(" - ")[0], // CIF
         detalhe: values.description, // CIF
         data: format(values.date, "yyyy-MM-dd"),
         tipoId: Number(values.type),
         usuarioId: session.userId,
-        chapa: adminSelectedUser ? adminSelectedUser.chapa : undefined,
+        chapa: values.userName.split(" - ")[0],
       });
       const response = await fetch(
         `http://${window.location.hostname}:8080/horas`,
@@ -347,12 +415,12 @@ export default function Dashboard() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             horasEfetivas: formattedHours,
-            cif: values.cif, // CIF
+            cif: values.cif.split(" - ")[0], // CIF
             detalhe: values.description, // CIF
             data: format(values.date, "yyyy-MM-dd"),
             tipoId: Number(values.type),
             usuarioId: session.userId,
-            chapa: adminSelectedUser ? adminSelectedUser.chapa : undefined,
+            chapa: values.userName.split(" - ")[0],
           }),
         },
       );
@@ -369,10 +437,14 @@ export default function Dashboard() {
         description: `${formattedHours}h - ${values.cif} (Salvo no banco)`,
       });
 
+      setDebouncedQueryValues(cifOptions.slice(0, 100));
+
       form.reset({
         ...values,
-        cif: "", // Reset CIF
+        type: "",
+        cif: "",
         totalHoursInput: "",
+        description: "",
       });
     } catch (error: any) {
       console.error("Erro ao apontar horas:", error);
@@ -611,8 +683,10 @@ export default function Dashboard() {
           {/* History Sidebar */}
           <Card className="shadow-lg border-zinc-200/50 dark:border-zinc-800/50 w-full lg:w-[380px] xl:w-[420px] shrink-0 h-fit">
             <CardHeader>
-              <CardTitle className="text-lg font-bold">Resumo do Mês</CardTitle>
-              <CardDescription>Seus últimos registros.</CardDescription>
+              <CardTitle className="text-lg font-bold">
+                Seus últimos apontamentos
+              </CardTitle>
+              <CardDescription></CardDescription>
             </CardHeader>
             <CardContent>
               {currentUserEntries.length === 0 ? (
@@ -734,323 +808,312 @@ export default function Dashboard() {
       </div>
 
       {/* Entry Dialog */}
-      <Dialog
-        modal={false}
-        open={isDialogOpen}
-        onOpenChange={(open) => {
-          setIsDialogOpen(open);
-          if (!open) {
-            setTimeout(() => setSelectedDate(undefined), 200);
-          }
-        }}
-      >
-        <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6 rounded-xl">
-          <DialogHeader>
-            <DialogTitle>
-              Apontamentos -{" "}
-              {selectedDate && format(selectedDate, "dd/MM/yyyy")}
-            </DialogTitle>
-            <DialogDescription>
-              Gerencie suas horas para este dia.
-            </DialogDescription>
-          </DialogHeader>
+      {isDialogOpen ? (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+          <Dialog
+            modal={false}
+            open={isDialogOpen}
+            onOpenChange={(open) => {
+              setIsDialogOpen(open);
+              if (!open) {
+                setTimeout(() => setSelectedDate(undefined), 200);
+              }
+            }}
+          >
+            <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6 rounded-xl">
+              <DialogHeader>
+                <DialogTitle>
+                  Apontamentos -{" "}
+                  {selectedDate && format(selectedDate, "dd/MM/yyyy")}
+                </DialogTitle>
+                <DialogDescription>
+                  Gerencie suas horas para este dia.
+                </DialogDescription>
+              </DialogHeader>
 
-          {/* Daily Summary */}
-          <div className="grid grid-cols-1 gap-4 p-4 bg-muted/50 rounded-lg">
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground">
-                Total Apontado Hoje
-              </p>
-              <p className="text-3xl font-bold text-primary">
-                {totalHoursPointedStr}
-              </p>
-            </div>
-          </div>
+              {/* Daily Summary */}
+              <div className="grid grid-cols-1 gap-4 p-4 bg-muted/50 rounded-lg">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Total Apontado Hoje
+                  </p>
+                  <p className="text-3xl font-bold text-primary">
+                    {totalHoursPointedStr}
+                  </p>
+                </div>
+              </div>
 
-          {/* Existing Entries List */}
-          {selectedDateEntries.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Registros do Dia:</h3>
-              {selectedDateEntries.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between p-3 border rounded bg-background text-sm"
-                >
-                  <div className="flex-1 min-w-0 pr-3">
-                    <div className="flex items-center gap-2">
-                      <p
-                        className="font-medium truncate"
-                        title={
-                          cifOptions.find((c) => c.value === entry.cif)
-                            ?.label || entry.cif
-                        }
-                      >
-                        {cifOptions.find((c) => c.value === entry.cif)?.label ||
-                          entry.cif}
-                      </p>
-                      <div className="shrink-0 flex items-center">
-                        {entry.status === "approved" ? (
-                          <Badge
-                            variant="default"
-                            className="bg-green-600 hover:bg-green-700 text-[10px] h-5 px-1.5 whitespace-nowrap"
+              {/* Existing Entries List */}
+              {selectedDateEntries.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium max-w-full">
+                    Registros do Dia:
+                  </h3>
+                  {selectedDateEntries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center justify-between p-3 border rounded bg-background text-sm"
+                    >
+                      <div className="flex-1 min-w-0 pr-3">
+                        <div className="flex items-center gap-2">
+                          <p
+                            className="font-medium truncate max-w-[100px] overflow-hidden text-ellipsis sm:max-w-[200px] md:max-w-[350px]"
+                            title={
+                              cifOptions.find((c) => c.value === entry.cif)
+                                ?.label || entry.cif
+                            }
                           >
-                            Aprovado
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="secondary"
-                            className="text-amber-600 bg-amber-100 dark:bg-amber-900/30 text-[10px] h-5 px-1.5 whitespace-nowrap"
-                          >
-                            Pendente
-                          </Badge>
-                        )}
+                            {cifOptions.find((c) => c.value === entry.cif)
+                              ?.label || entry.cif}
+                          </p>
+                          <div className="shrink-0 flex items-center">
+                            {entry.status === "approved" ? (
+                              <Badge
+                                variant="default"
+                                className="bg-green-600 hover:bg-green-700 text-[10px] h-5 px-1.5 whitespace-nowrap"
+                              >
+                                Aprovado
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="secondary"
+                                className="text-amber-600 bg-amber-100 dark:bg-amber-900/30 text-[10px] h-5 px-1.5 whitespace-nowrap"
+                              >
+                                Pendente
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                        <span className="font-bold">{entry.totalHours}h</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className={cn(
+                            "h-8 w-8",
+                            entry.status === "approved"
+                              ? "text-muted-foreground opacity-50 cursor-not-allowed"
+                              : "text-destructive",
+                          )}
+                          onClick={() => deleteEntry(entry.id, entry.status)}
+                          disabled={entry.status === "approved"}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                    <span className="font-bold">{entry.totalHours}h</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className={cn(
-                        "h-8 w-8",
-                        entry.status === "approved"
-                          ? "text-muted-foreground opacity-50 cursor-not-allowed"
-                          : "text-destructive",
-                      )}
-                      onClick={() => deleteEntry(entry.id, entry.status)}
-                      disabled={entry.status === "approved"}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
-          <div className="border-t my-2" />
+              <div className="border-t my-2" />
 
-          <h3 className="text-sm font-medium pt-2">
-            Adicionar Novo Apontamento:
-          </h3>
+              <h3 className="text-sm font-medium pt-2">
+                Adicionar Novo Apontamento:
+              </h3>
 
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full overflow-hidden">
-                <FormField
-                  control={form.control}
-                  name="userName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Funcionário</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input {...field} readOnly className="bg-muted" />
-                          <User className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <Form {...form}>
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full overflow-hidden">
+                    <FormField
+                      control={form.control}
+                      name="userName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Funcionário</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input {...field} readOnly className="bg-muted" />
+                              <User className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="cif"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Empresa (CIF)</FormLabel>
-                      <FormControl>
-                        <Combobox
-                          items={cifOptions}
-                          onInputValueChange={(e) => {
-                            field.onChange(e);
-                          }}
-                        >
-                          <ComboboxInput
-                            //   value={formCifValue}
-                            placeholder="Select a framework"
+                    <FormField
+                      control={form.control}
+                      name="cif"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Empresa (CIF)</FormLabel>
+                          <FormControl>
+                            <Combobox
+                              items={
+                                debouncedQueryValues
+                                // debouncedQuery.length == 0
+                                //   ? cifOptions.slice(0, 100)
+                                //   : debouncedQuery
+                              }
+                              onInputValueChange={(e) =>
+                                handleDebouncedInputChange(e, field.onChange)
+                              }
+                            >
+                              <ComboboxInput
+                                //   value={formCifValue}
+                                placeholder="Digite a CIF"
+                              />
+                              <ComboboxContent>
+                                <ComboboxEmpty>
+                                  CIF não encontrada
+                                </ComboboxEmpty>
+                                <ComboboxList>
+                                  {(item) => (
+                                    <ComboboxItem
+                                      className="odd:bg-zinc-300"
+                                      key={item.label}
+                                      value={item.label}
+                                    >
+                                      {item.label}
+                                    </ComboboxItem>
+                                  )}
+                                </ComboboxList>
+                              </ComboboxContent>
+                            </Combobox>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Date field is hidden as it's set by calendar context */}
+                  <FormField
+                    control={form.control}
+                    name="date"
+                    render={({ field }) => (
+                      <FormItem className="hidden">
+                        <FormControl>
+                          <Input
+                            {...field}
+                            value={
+                              field.value
+                                ? format(field.value, "yyyy-MM-dd")
+                                : ""
+                            }
+                            type="hidden"
                           />
-                          <ComboboxContent>
-                            <ComboboxEmpty>No items found.</ComboboxEmpty>
-                            <ComboboxList>
-                              {(item) => (
-                                <ComboboxItem
-                                  onSelect={(e) => {
-                                    console.log(e);
-                                  }}
-                                  className="odd:bg-zinc-300"
-                                  key={item.label}
-                                  value={item.label}
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full overflow-hidden">
+                    <FormField
+                      control={form.control}
+                      name="type"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tipo de Apontamento</FormLabel>
+                          <FormControl>
+                            <div className="relative w-full max-w-full min-w-0 overflow-hidden">
+                              <select
+                                className="flex h-10 w-full min-w-0 appearance-none rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 text-ellipsis overflow-hidden whitespace-nowrap"
+                                value={field.value}
+                                onChange={field.onChange}
+                              >
+                                <option value="" disabled hidden>
+                                  Selecione o tipo
+                                </option>
+                                {typeOptions.map((option) => (
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
                                 >
-                                  {item.label}
-                                </ComboboxItem>
-                              )}
-                            </ComboboxList>
-                          </ComboboxContent>
-                        </Combobox>
+                                  <path d="m6 9 6 6 6-6" />
+                                </svg>
+                              </div>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                        {/* <div className="relative w-full max-w-full min-w-0 overflow-hidden">
-                          <select
-                            className="flex h-10 w-full min-w-0 appearance-none rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 text-ellipsis overflow-hidden whitespace-nowrap"
-                            value={field.value}
-                            onChange={field.onChange}
-                          >
-                            <option value="" disabled hidden>
-                              Selecione a empresa
-                            </option>
-                            {cifOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground">
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="m6 9 6 6 6-6" />
-                            </svg>
-                          </div>
-                        </div> */}
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                    <FormField
+                      control={form.control}
+                      name="totalHoursInput"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Horas Trabalhadas</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input {...field} placeholder="Ex: 08:00 ou 8" />
+                              <Clock className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            </div>
+                          </FormControl>
+                          <FormDescription className="text-xs">
+                            Informe o total de horas líquidas.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-              {/* Date field is hidden as it's set by calendar context */}
-              <FormField
-                control={form.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem className="hidden">
-                    <FormControl>
-                      <Input
-                        {...field}
-                        value={
-                          field.value ? format(field.value, "yyyy-MM-dd") : ""
-                        }
-                        type="hidden"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Descrição (Opcional)</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Descreva brevemente a atividade realizada..."
+                            className="resize-none"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full overflow-hidden">
-                <FormField
-                  control={form.control}
-                  name="type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tipo de Apontamento</FormLabel>
-                      <FormControl>
-                        <div className="relative w-full max-w-full min-w-0 overflow-hidden">
-                          <select
-                            className="flex h-10 w-full min-w-0 appearance-none rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 text-ellipsis overflow-hidden whitespace-nowrap"
-                            value={field.value}
-                            onChange={field.onChange}
-                          >
-                            <option value="" disabled hidden>
-                              Selecione o tipo
-                            </option>
-                            {typeOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground">
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="m6 9 6 6 6-6" />
-                            </svg>
-                          </div>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-md text-xs text-yellow-700 dark:text-yellow-300 flex gap-2">
+                    <Hourglass className="w-4 h-4 shrink-0" />
+                    <p>
+                      Novos apontamentos ficam "Pendentes" até aprovação do
+                      gestor. Uma vez aprovados, não podem ser alterados ou
+                      exluídos.
+                    </p>
+                  </div>
 
-                <FormField
-                  control={form.control}
-                  name="totalHoursInput"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Horas Trabalhadas</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input {...field} placeholder="Ex: 08:00 ou 8" />
-                          <Clock className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        </div>
-                      </FormControl>
-                      <FormDescription className="text-xs">
-                        Informe o total de horas líquidas.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição (Opcional)</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Descreva brevemente a atividade realizada..."
-                        className="resize-none"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-md text-xs text-yellow-700 dark:text-yellow-300 flex gap-2">
-                <Hourglass className="w-4 h-4 shrink-0" />
-                <p>
-                  Novos apontamentos ficam "Pendentes" até aprovação do gestor.
-                  Uma vez aprovados, não podem ser alterados ou exluídos.
-                </p>
-              </div>
-
-              <DialogFooter>
-                <Button type="submit" className="w-full">
-                  Adicionar Apontamento
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+                  <DialogFooter>
+                    <Button type="submit" className="w-full">
+                      Adicionar Apontamento
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      ) : (
+        <></>
+      )}
     </>
   );
 }

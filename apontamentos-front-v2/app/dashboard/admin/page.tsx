@@ -83,70 +83,129 @@ export default function AdminAprovalPage() {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
+  const [loggedUserName, setLoggedUserName] = useState<string | null>(null);
 
   // Fetch Apontamentos & Session
   useEffect(() => {
     getSessionData().then((session) => {
+      console.log(session);
       if (session?.userId) {
+        console.log(session);
         setUserId(session.userId);
+        setLoggedUserName(session.nome!);
 
-        // Primeiramente carrega os usuarios gerais para ter as chapas e nomes
-        fetch(`http://${window.location.hostname}:8080/user`)
+        // Bbusca quem sao os subordinados do usuário logado
+
+        fetch(
+          `http://${window.location.hostname}:8080/chapa-subordinado/${session.userId}`,
+        )
           .then((res) => res.json())
-          .then((allUsersData) => {
-            // Agora busca quem sao os subordinados daquele gestor
-            fetch(
-              `http://${window.location.hostname}:8080/chapa-subordinado/${session.userId}`,
-            )
+          .then((subSupData) => {
+            const validSubSup = Array.isArray(subSupData) ? subSupData : [];
+            const allowedChapas = validSubSup
+              .map((s: any) => s.chapa)
+              .filter(Boolean);
+
+            const allowedNames = new Set(
+              allowedChapas,
+              // .map((u: any) => u.nome || u.usuario)
+              // .filter(Boolean),
+            );
+            console.log("Allowed Chapas:", allowedChapas);
+            // Busca todos apontamentos e filtra apenas pros nomes dos subordinados
+            fetch(`http://${window.location.hostname}:8080/horas`)
               .then((res) => res.json())
-              .then((subSupData) => {
-                const validSubSup = Array.isArray(subSupData) ? subSupData : [];
-                const allowedChapas = validSubSup
-                  .map((s: any) => s.chapa)
-                  .filter(Boolean);
+              .then((data) => {
+                console.log(data);
+                const fetchedEntries = data.map((h: any) => ({
+                  id: String(h.id),
+                  dataId: String(h.dataApontamentoId?.id),
+                  date: new Date(h.dataApontamentoId?.data || new Date()),
+                  cif: h.cif,
+                  totalHours: h.horasEfetivas,
+                  status: h.dataApontamentoId?.dataAprovacao
+                    ? "approved"
+                    : "pending",
+                  type: String(h.tipoId?.tipo),
+                  description: h.detalhe,
+                  chapa: h.dataApontamentoId?.chapa,
+                  userName:
+                    validSubSup.find(
+                      (s: any) => s.chapa === h.dataApontamentoId.chapa,
+                    )?.nome ||
+                    session.nome ||
+                    "Usuário",
+                }));
+                // .filter((e: any) =>
+                //   allowedNames.has(e.dataApontamentoId.chapa),
+                // );
 
-                const allowedUsers = allUsersData.filter((u: any) =>
-                  allowedChapas.includes(u.chapa),
-                );
-
-                const allowedNames = new Set(
-                  allowedUsers
-                    .map((u: any) => u.nome || u.usuario)
-                    .filter(Boolean),
-                );
-
-                // Busca todos apontamentos e filtra apenas pros nomes dos subordinados
-                fetch(`http://${window.location.hostname}:8080/horas`)
-                  .then((res) => res.json())
-                  .then((data) => {
-                    const fetchedEntries = data
-                      .map((h: any) => ({
-                        id: String(h.id),
-                        dataId: String(h.dataApontamentoId?.id),
-                        date: new Date(h.dataApontamentoId?.data || new Date()),
-                        cif: h.detalhe || "Indefinido",
-                        totalHours: h.horasEfetivas,
-                        status: h.dataApontamentoId?.dataAprovacao
-                          ? "approved"
-                          : "pending",
-                        type: String(h.tipoId?.id),
-                        description: h.detalhe,
-                        userName: h.usuarioId?.nome || "Usuário",
-                      }))
-                      .filter((e: any) => allowedNames.has(e.userName));
-
-                    setEntries(fetchedEntries);
-                  })
-                  .catch((err) => console.error("Error fetching horas", err));
+                setEntries(fetchedEntries);
               })
-              .catch((err) =>
-                console.error("Error fetching subordinados", err),
-              );
-          })
-          .catch((err) => console.error("Error fetching usuarios", err));
+              .catch((err) => console.error("Error fetching horas", err));
+          });
+
+        // // Primeiramente carrega os usuarios gerais para ter as chapas e nomes
+        // fetch(`http://${window.location.hostname}:8080/user`)
+        //   .then((res) => res.json())
+        //   .then((allUsersData) => {
+        //     // Agora busca quem sao os subordinados daquele gestor
+        //     fetch(
+        //       `http://${window.location.hostname}:8080/chapa-subordinado/${session.userId}`,
+        //     )
+        //       .then((res) => res.json())
+        //       .then((subSupData) => {
+        //         const validSubSup = Array.isArray(subSupData) ? subSupData : [];
+        //         const allowedChapas = validSubSup
+        //           .map((s: any) => s.chapa)
+        //           .filter(Boolean);
+
+        //         const allowedUsers = allUsersData.filter((u: any) =>
+        //           allowedChapas.includes(u.chapa),
+        //         );
+
+        //         const allowedNames = new Set(
+        //           allowedUsers
+        //             .map((u: any) => u.nome || u.usuario)
+        //             .filter(Boolean),
+        //         );
+
+        //         // Busca todos apontamentos e filtra apenas pros nomes dos subordinados
+        //         fetch(`http://${window.location.hostname}:8080/horas`)
+        //           .then((res) => res.json())
+        //           .then((data) => {
+        //             const fetchedEntries = data
+        //               .map((h: any) => ({
+        //                 id: String(h.id),
+        //                 dataId: String(h.dataApontamentoId?.id),
+        //                 date: new Date(h.dataApontamentoId?.data || new Date()),
+        //                 cif: h.detalhe || "Indefinido",
+        //                 totalHours: h.horasEfetivas,
+        //                 status: h.dataApontamentoId?.dataAprovacao
+        //                   ? "approved"
+        //                   : "pending",
+        //                 type: String(h.tipoId?.id),
+        //                 description: h.detalhe,
+        //                 userName: h.usuarioId?.nome || "Usuário",
+        //               }))
+        //               .filter((e: any) => allowedNames.has(e.userName));
+
+        //             setEntries(fetchedEntries);
+        //           })
+        //           .catch((err) => console.error("Error fetching horas", err));
+        //       })
+        // .catch((err) =>
+        //   console.error("Error fetching subordinados", err),
+        // );
+        // })
+        // .catch((err) => console.error("Error fetching usuarios", err));
       }
     });
   }, []);
+
+  useEffect(() => {
+    console.log(entries);
+  }, [entries]);
 
   const handleApprove = async (
     id: string,
@@ -230,10 +289,16 @@ export default function AdminAprovalPage() {
       );
 
       setEntries((prev) =>
-        prev.map((e) =>
-          e.userName === userName ? { ...e, status: "approved" } : e,
+        prev.map(
+          (e) =>
+            ids.filter((item) => String(item) === e.dataId).length > 0
+              ? { ...e, status: "approved" }
+              : e,
+          // e.userName === userName ? { ...e, status: "approved" } : e,
         ),
       );
+
+      setSelectedUser(null);
       toast.success(
         `${ids.length} apontamentos de ${userName} foram aprovados!`,
       );
@@ -243,7 +308,13 @@ export default function AdminAprovalPage() {
   };
 
   // Agrupar apontamentos por pessoa
-  const userNames = Array.from(new Set(entries.map((e) => e.userName)));
+  const userNames = Array.from(
+    new Set(
+      entries
+        .map((e) => (e.userName != loggedUserName ? e.userName : null))
+        .filter(Boolean),
+    ),
+  );
 
   const groupedData = userNames.map((userName) => {
     const userEntries = entries.filter((e) => e.userName === userName);
@@ -466,7 +537,7 @@ export default function AdminAprovalPage() {
                   size="sm"
                   variant="outline"
                   className="border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-800"
-                  onClick={() => handleApproveAllUser(activeUserData.userName)}
+                  onClick={() => handleApproveAllUser(activeUserData.userName!)}
                 >
                   <Check className="w-4 h-4 mr-1" />
                   Aprovar Tudo de {activeUserData.userName}

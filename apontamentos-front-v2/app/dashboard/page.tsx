@@ -13,6 +13,7 @@ import {
   Building,
   Plus,
   Trash2,
+  Pencil,
   CheckCircle2,
   Hourglass,
   LogOut,
@@ -107,6 +108,9 @@ export default function Dashboard() {
   );
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showRejectedAlert, setShowRejectedAlert] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [hasShownInitialAlert, setHasShownInitialAlert] = useState(false);
 
   // API Data States
   const [cifOptions, setCifOptions] = useState<
@@ -271,7 +275,7 @@ export default function Dashboard() {
             cif: h.cif || "Indefinido",
             chapa: h.dataApontamentoId?.chapa,
             totalHours: h.horasEfetivas,
-            status: h.dataApontamentoId?.dataAprovacao ? "approved" : "pending",
+            status: h.dataApontamentoId?.dataAprovacao ? "approved" : (h.dataApontamentoId?.dataRejeitada ? "rejected" : "pending"),
             type: String(h.tipoId?.tipo) || "Indefinido",
             description: h.detalhe || "Indefinido",
             user: {
@@ -329,6 +333,9 @@ export default function Dashboard() {
     setSelectedDate(date);
     if (date) {
       setIsDialogOpen(true);
+      if (currentUserEntries.some((e) => e.status === "rejected")) {
+        setShowRejectedAlert(true);
+      }
     }
   }
 
@@ -352,6 +359,16 @@ export default function Dashboard() {
   // }, [currentUserEntries]);
 
   // Calculate stats for the selected date
+  const rejectedEntries = currentUserEntries.filter((e) => e.status === "rejected");
+  const hasRejectedEntries = rejectedEntries.length > 0;
+
+  useEffect(() => {
+    if (hasRejectedEntries && !hasShownInitialAlert) {
+      setShowRejectedAlert(true);
+      setHasShownInitialAlert(true);
+    }
+  }, [hasRejectedEntries, hasShownInitialAlert]);
+
   const selectedDateEntries = currentUserEntries.filter(
     (e) =>
       selectedDate &&
@@ -439,6 +456,8 @@ export default function Dashboard() {
 
       setDebouncedQueryValues(cifOptions.slice(0, 100));
 
+      setIsEditing(false);
+
       form.reset({
         ...values,
         type: "",
@@ -446,15 +465,19 @@ export default function Dashboard() {
         totalHoursInput: "",
         description: "",
       });
+
+      // Nag the user if they still have rejected entries!
+      if (hasRejectedEntries && !isEditing) {
+        setShowRejectedAlert(true);
+      }
     } catch (error: any) {
       console.error("Erro ao apontar horas:", error);
       toast.error("Erro ao salvar apontamento", { description: error.message });
     }
   }
-
   const deleteEntry = async (id: string, status: EntryStatus) => {
     if (status === "approved") {
-      toast.error("Não é possível remover apontamentos aprovados.");
+      toast.error("Não é possível remover apontamentos já processados.");
       return;
     }
 
@@ -478,6 +501,26 @@ export default function Dashboard() {
         description: error.message,
       });
     }
+  };
+
+  const editEntry = async (entry: Entry) => {
+    if (entry.status === "approved") {
+      toast.error("Não é possível editar apontamentos aprovados.");
+      return;
+    }
+
+    form.reset({
+      userName: form.getValues("userName"),
+      cif: cifOptions.find((c) => c.value === entry.cif)?.label || entry.cif,
+      type: entry.type,
+      date: entry.date,
+      totalHoursInput: entry.totalHours,
+      description: entry.description || "",
+    });
+
+    setIsEditing(true);
+    toast.info("Apontamento carregado para edição. Salve novamente para confirmar.");
+    await deleteEntry(entry.id, entry.status);
   };
 
   // Helper to check if a date has an entry
@@ -573,8 +616,19 @@ export default function Dashboard() {
                     disabled={(date) => {
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
-                      const fortyDaysAgo = subDays(today, 40);
-                      return date > new Date() || date < fortyDaysAgo;
+
+                      let limitDate = new Date();
+                      limitDate.setHours(0, 0, 0, 0);
+                      let count = 0;
+                      while (count < 2) {
+                        limitDate.setDate(limitDate.getDate() - 1);
+                        const day = limitDate.getDay();
+                        if (day !== 0 && day !== 6) {
+                          count++;
+                        }
+                      }
+
+                      return date > new Date() || date < limitDate;
                     }}
                     className="rounded-xl border shadow-sm p-3 sm:p-6 w-full max-w-full overflow-hidden h-fit flex justify-center [--cell-size:11.5vw] sm:[--cell-size:60px] md:[--cell-size:75px] text-base sm:text-lg"
                     classNames={{
@@ -874,6 +928,13 @@ export default function Dashboard() {
                               >
                                 Aprovado
                               </Badge>
+                            ) : entry.status === "rejected" ? (
+                              <Badge
+                                variant="destructive"
+                                className="text-[10px] h-5 px-1.5 whitespace-nowrap"
+                              >
+                                Rejeitado
+                              </Badge>
                             ) : (
                               <Badge
                                 variant="secondary"
@@ -887,21 +948,30 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                         <span className="font-bold">{entry.totalHours}h</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className={cn(
-                            "h-8 w-8",
-                            entry.status === "approved"
-                              ? "text-muted-foreground opacity-50 cursor-not-allowed"
-                              : "text-destructive",
-                          )}
-                          onClick={() => deleteEntry(entry.id, entry.status)}
-                          disabled={entry.status === "approved"}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {entry.status !== "approved" && (
+                          <>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              onClick={() => editEntry(entry)}
+                              title="Editar apontamento"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                              onClick={() => deleteEntry(entry.id, entry.status)}
+                              title="Excluir apontamento"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1101,10 +1171,20 @@ export default function Dashboard() {
                     </p>
                   </div>
 
-                  <DialogFooter>
+                  <DialogFooter className="flex flex-col gap-2 relative">
+                    {hasRejectedEntries && !isEditing && (
+                      <div className="w-full bg-red-50 text-red-700 p-2 text-xs rounded-md border border-red-200">
+                        Você possui apontamentos rejeitados no seu histórico. Corrija-os editando ou os excluindo antes de inserir novos registros.
+                      </div>
+                    )}
                     <Button type="submit" className="w-full">
-                      Adicionar Apontamento
+                      {isEditing ? "Salvar Ajuste" : "Adicionar Apontamento"}
                     </Button>
+                    {isEditing && (
+                      <Button type="button" variant="outline" className="w-full" onClick={() => { setIsEditing(false); form.reset(); }}>
+                        Cancelar Edição
+                      </Button>
+                    )}
                   </DialogFooter>
                 </form>
               </Form>
@@ -1114,6 +1194,26 @@ export default function Dashboard() {
       ) : (
         <></>
       )}
+
+      {/* Rejected Entries Alert Popup */}
+      <Dialog open={showRejectedAlert} onOpenChange={setShowRejectedAlert}>
+        <DialogContent className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <Hourglass className="w-5 h-5" />
+              Atenção: Apontamentos Rejeitados
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-zinc-700 dark:text-zinc-300">
+              Você tem <strong>{rejectedEntries.length} apontamento(s)</strong> que foi/foram rejeitado(s) pelo gestor em datas passadas.
+              <br /><br />
+              Para continuar inserindo novos apontamentos, é necessário acessar o dia do apontamento rejeitado (destacado no histórico lateral) e <strong>Ajustar (Editar)</strong> ou <strong>Excluir</strong> a entrada.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowRejectedAlert(false)}>Entendi</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

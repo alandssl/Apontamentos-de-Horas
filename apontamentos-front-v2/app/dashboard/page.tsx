@@ -108,9 +108,8 @@ export default function Dashboard() {
   );
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [showRejectedAlert, setShowRejectedAlert] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [hasShownInitialAlert, setHasShownInitialAlert] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // API Data States
   const [cifOptions, setCifOptions] = useState<
@@ -333,9 +332,6 @@ export default function Dashboard() {
     setSelectedDate(date);
     if (date) {
       setIsDialogOpen(true);
-      if (currentUserEntries.some((e) => e.status === "rejected")) {
-        setShowRejectedAlert(true);
-      }
     }
   }
 
@@ -357,17 +353,6 @@ export default function Dashboard() {
   //   console.log(currentUserEntries);
   //   console.log(watchedUserName);
   // }, [currentUserEntries]);
-
-  // Calculate stats for the selected date
-  const rejectedEntries = currentUserEntries.filter((e) => e.status === "rejected");
-  const hasRejectedEntries = rejectedEntries.length > 0;
-
-  useEffect(() => {
-    if (hasRejectedEntries && !hasShownInitialAlert) {
-      setShowRejectedAlert(true);
-      setHasShownInitialAlert(true);
-    }
-  }, [hasRejectedEntries, hasShownInitialAlert]);
 
   const selectedDateEntries = currentUserEntries.filter(
     (e) =>
@@ -414,9 +399,7 @@ export default function Dashboard() {
       // Find the correct references for the API POST
       const tipoObj = typeOptions.find((t) => t.value === values.type);
 
-      // Call API
-
-      console.log({
+      const payload = {
         horasEfetivas: formattedHours,
         cif: values.cif.split(" - ")[0], // CIF
         detalhe: values.description, // CIF
@@ -424,39 +407,62 @@ export default function Dashboard() {
         tipoId: Number(values.type),
         usuarioId: session.userId,
         chapa: values.userName.split(" - ")[0],
-      });
-      const response = await fetch(
-        `http://${window.location.hostname}:8080/horas`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            horasEfetivas: formattedHours,
-            cif: values.cif.split(" - ")[0], // CIF
-            detalhe: values.description, // CIF
-            data: format(values.date, "yyyy-MM-dd"),
-            tipoId: Number(values.type),
-            usuarioId: session.userId,
-            chapa: values.userName.split(" - ")[0],
-          }),
-        },
-      );
+      };
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Erro ao salvar no servidor");
+      if (isEditing && editingId) {
+        const response = await fetch(
+          `http://${window.location.hostname}:8080/horas/${editingId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        );
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || "Erro ao atualizar no servidor");
+        }
+
+        setEntries(
+          entries.map((e) =>
+            e.id === editingId ? { ...newEntry, id: editingId } : e
+          )
+        );
+
+        toast.success("Apontamento atualizado!", {
+          description: `${formattedHours}h - ${values.cif} (Atualizado no banco)`,
+        });
+      } else {
+        const response = await fetch(
+          `http://${window.location.hostname}:8080/horas`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        );
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || "Erro ao salvar no servidor");
+        }
+
+        // Limpa os registros locais antigos rejeitados deste dia para liberar a ui
+        const updatedEntries = entries.filter(e =>
+          !(e.status === "rejected" && format(e.date, "yyyy-MM-dd") === format(values.date, "yyyy-MM-dd"))
+        );
+        setEntries([...updatedEntries, newEntry]);
+
+        toast.success("Apontamento registrado!", {
+          description: `${formattedHours}h - ${values.cif} (Salvo no banco)`,
+        });
       }
-
-      // Append new entry instead of replacing
-      setEntries([...entries, newEntry]);
-
-      toast.success("Apontamento registrado!", {
-        description: `${formattedHours}h - ${values.cif} (Salvo no banco)`,
-      });
 
       setDebouncedQueryValues(cifOptions.slice(0, 100));
 
       setIsEditing(false);
+      setEditingId(null);
 
       form.reset({
         ...values,
@@ -465,18 +471,13 @@ export default function Dashboard() {
         totalHoursInput: "",
         description: "",
       });
-
-      // Nag the user if they still have rejected entries!
-      if (hasRejectedEntries && !isEditing) {
-        setShowRejectedAlert(true);
-      }
     } catch (error: any) {
       console.error("Erro ao apontar horas:", error);
       toast.error("Erro ao salvar apontamento", { description: error.message });
     }
   }
   const deleteEntry = async (id: string, status: EntryStatus) => {
-    if (status === "approved") {
+    if (status === "approved" || status === "rejected") {
       toast.error("Não é possível remover apontamentos já processados.");
       return;
     }
@@ -503,9 +504,9 @@ export default function Dashboard() {
     }
   };
 
-  const editEntry = async (entry: Entry) => {
-    if (entry.status === "approved") {
-      toast.error("Não é possível editar apontamentos aprovados.");
+  const editEntry = (entry: Entry) => {
+    if (entry.status === "approved" || entry.status === "rejected") {
+      toast.error("Não é possível editar apontamentos já processados.");
       return;
     }
 
@@ -519,8 +520,8 @@ export default function Dashboard() {
     });
 
     setIsEditing(true);
+    setEditingId(entry.id);
     toast.info("Apontamento carregado para edição. Salve novamente para confirmar.");
-    await deleteEntry(entry.id, entry.status);
   };
 
   // Helper to check if a date has an entry
@@ -576,6 +577,10 @@ export default function Dashboard() {
                     <div className="w-3 h-3 rounded-md bg-rose-600"></div>
                     <span>3+ dias sem apontar</span>
                   </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-red-600 flex items-center justify-center text-white text-[9px] font-bold">!</div>
+                    <span className="text-red-600 font-semibold">Rejeitado</span>
+                  </div>
                 </div>
               </CardDescription>
 
@@ -614,6 +619,15 @@ export default function Dashboard() {
                     selected={selectedDate}
                     onSelect={onDateSelect}
                     disabled={(date) => {
+                      const hasRejectedOnThisDate = currentUserEntries.some((e) => e.status === "rejected" && format(e.date, "yyyy-MM-dd") === format(date, "yyyy-MM-dd"));
+                      if (hasRejectedOnThisDate) {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const diffTime = Math.abs(today.getTime() - date.getTime());
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        if (diffDays <= 7) return false;
+                      }
+
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
 
@@ -707,6 +721,12 @@ export default function Dashboard() {
                         }
                         return workDaysPassed > 0 && workDaysPassed < 3;
                       },
+                      rejectedDate: (date) => {
+                        const dayEntries = currentUserEntries.filter(
+                          (e) => format(e.date, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+                        );
+                        return dayEntries.some((e) => e.status === "rejected");
+                      },
                     }}
                     modifiersClassNames={{
                       hasEntry:
@@ -717,6 +737,8 @@ export default function Dashboard() {
                         "bg-yellow-300 text-yellow-950 border border-yellow-400 font-bold rounded-md",
                       dangerGap:
                         "bg-rose-600 text-white border border-rose-700 font-bold rounded-md",
+                      rejectedDate:
+                        "ring-2 ring-red-500 ring-offset-1 ring-offset-background text-red-700 bg-red-100 dark:bg-red-900/40 font-bold !rounded-[0.4rem] border-0 after:absolute after:-top-1 after:-right-1 after:w-4 after:h-4 after:bg-red-600 after:text-white after:flex after:items-center after:justify-center after:rounded-full after:content-['!'] after:text-[10px] after:leading-none after:font-bold after:shadow-sm after:border after:border-white dark:after:border-background z-10",
                     }}
                     modifiersStyles={{
                       partialEntry: {
@@ -899,19 +921,20 @@ export default function Dashboard() {
 
               {/* Existing Entries List */}
               {selectedDateEntries.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium max-w-full">
+                <div className="flex flex-col gap-2 w-full min-w-0">
+                  <h3 className="text-sm font-medium">
                     Registros do Dia:
                   </h3>
-                  {selectedDateEntries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex items-center justify-between p-3 border rounded bg-background text-sm"
-                    >
-                      <div className="flex-1 min-w-0 pr-3">
-                        <div className="flex items-center gap-2">
+                  {selectedDateEntries
+                    .filter((e) => e.id !== editingId)
+                    .map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex items-center justify-between p-2 sm:p-3 border rounded bg-background text-sm w-full min-w-0 gap-2"
+                      >
+                        <div className="flex flex-1 items-center gap-2 min-w-0">
                           <p
-                            className="font-medium truncate max-w-[100px] overflow-hidden text-ellipsis sm:max-w-[200px] md:max-w-[350px]"
+                            className="font-medium truncate min-w-0 flex-1 text-[13px] sm:text-sm"
                             title={
                               cifOptions.find((c) => c.value === entry.cif)
                                 ?.label || entry.cif
@@ -945,36 +968,35 @@ export default function Dashboard() {
                             )}
                           </div>
                         </div>
+                        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                          <span className="font-bold">{entry.totalHours}h</span>
+                          {entry.status === "pending" && (
+                            <>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                onClick={() => editEntry(entry)}
+                                title="Editar apontamento"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                onClick={() => deleteEntry(entry.id, entry.status)}
+                                title="Excluir apontamento"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                        <span className="font-bold">{entry.totalHours}h</span>
-                        {entry.status !== "approved" && (
-                          <>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                              onClick={() => editEntry(entry)}
-                              title="Editar apontamento"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                              onClick={() => deleteEntry(entry.id, entry.status)}
-                              title="Excluir apontamento"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
 
@@ -989,7 +1011,7 @@ export default function Dashboard() {
                   onSubmit={form.handleSubmit(onSubmit)}
                   className="space-y-4"
                 >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full overflow-hidden">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
                     <FormField
                       control={form.control}
                       name="userName"
@@ -1075,7 +1097,7 @@ export default function Dashboard() {
                     )}
                   />
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full overflow-hidden">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
                     <FormField
                       control={form.control}
                       name="type"
@@ -1171,49 +1193,25 @@ export default function Dashboard() {
                     </p>
                   </div>
 
-                  <DialogFooter className="flex flex-col gap-2 relative">
-                    {hasRejectedEntries && !isEditing && (
-                      <div className="w-full bg-red-50 text-red-700 p-2 text-xs rounded-md border border-red-200">
-                        Você possui apontamentos rejeitados no seu histórico. Corrija-os editando ou os excluindo antes de inserir novos registros.
-                      </div>
-                    )}
-                    <Button type="submit" className="w-full">
-                      {isEditing ? "Salvar Ajuste" : "Adicionar Apontamento"}
-                    </Button>
-                    {isEditing && (
-                      <Button type="button" variant="outline" className="w-full" onClick={() => { setIsEditing(false); form.reset(); }}>
-                        Cancelar Edição
+                  <div className="flex flex-col gap-3 relative pt-2">
+
+                    <div className="flex flex-col sm:flex-row gap-3 w-full">
+                      <Button type="submit" className="w-full sm:flex-1">
+                        {isEditing ? "Salvar Ajuste" : "Adicionar Apontamento"}
                       </Button>
-                    )}
-                  </DialogFooter>
+                      {isEditing && (
+                        <Button type="button" variant="outline" className="w-full sm:flex-1" onClick={() => { setIsEditing(false); setEditingId(null); form.reset(); }}>
+                          Cancelar Edição
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </form>
               </Form>
             </DialogContent>
           </Dialog>
-        </div>
-      ) : (
-        <></>
-      )}
-
-      {/* Rejected Entries Alert Popup */}
-      <Dialog open={showRejectedAlert} onOpenChange={setShowRejectedAlert}>
-        <DialogContent className="max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle className="text-red-600 flex items-center gap-2">
-              <Hourglass className="w-5 h-5" />
-              Atenção: Apontamentos Rejeitados
-            </DialogTitle>
-            <DialogDescription className="pt-2 text-zinc-700 dark:text-zinc-300">
-              Você tem <strong>{rejectedEntries.length} apontamento(s)</strong> que foi/foram rejeitado(s) pelo gestor em datas passadas.
-              <br /><br />
-              Para continuar inserindo novos apontamentos, é necessário acessar o dia do apontamento rejeitado (destacado no histórico lateral) e <strong>Ajustar (Editar)</strong> ou <strong>Excluir</strong> a entrada.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={() => setShowRejectedAlert(false)}>Entendi</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div >
+      ) : null}
     </>
   );
 }

@@ -101,4 +101,5 @@ public class DataApontamentoController {
         List<Long> datas = service.aprovarPorListaDeIds(dto.getIds(), dto.getUserId());
         return ResponseEntity.ok(datas);
     }
+
 }

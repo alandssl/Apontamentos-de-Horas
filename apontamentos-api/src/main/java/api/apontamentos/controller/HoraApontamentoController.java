@@ -54,4 +54,10 @@ public class HoraApontamentoController {
         return ResponseEntity.ok(atualizado);
     }
 
+    @PutMapping("/editar-rejeitada/{id}")
+    public ResponseEntity<HoraApontamentos> editarHoraRejeitada(@PathVariable Long id,
+        @RequestBody HoraApontamentos horaAtualizada) {
+        HoraApontamentos horaApontamentos = service.atualizarApontamentoRejeitado(id, horaAtualizada);
+        return ResponseEntity.ok(horaApontamentos);
+    }
 }

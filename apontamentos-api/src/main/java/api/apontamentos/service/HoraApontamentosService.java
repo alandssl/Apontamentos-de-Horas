@@ -130,5 +130,17 @@ public class HoraApontamentosService {
     //     return repository.findByDataApontamentoIdAndAtivoTrue(data);
     // }
 
+     public HoraApontamentos atualizarApontamentoRejeitado(Long id, HoraApontamentos horaApontamentosAtualizado) {
+        HoraApontamentos horaApontamentos = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
+        DataApontamentos dataApontamento = horaApontamentos.getDataApontamentoId();
+        if (dataApontamento.getDataRejeitada() != null) {
+            dataApontamento.setDataRejeitada(null);
+            horaApontamentos.setHorasEfetivas(horaApontamentosAtualizado.getHorasEfetivas());
+            horaApontamentos.setCif(horaApontamentosAtualizado.getCif());
+            horaApontamentos.setTipoId(horaApontamentosAtualizado.getTipoId());
+        }
+        return repository.save(horaApontamentos);
+    }
     
 }

@@ -21,6 +21,7 @@ public class DataApontamentosService {
     private final DataApontamentosRepository repository;
     private final UsuarioRepository usuarioRepository;
     private final HoraApontamentosRepository horaRepository;
+    private final HoraApontamentosService horaService;
 
     // Salva um novo apontamento, definindo o campo "ativo" como true
     public DataApontamentos salvar(DataApontamentos dataApontamentos) {

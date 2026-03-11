@@ -459,19 +459,6 @@ export default function Dashboard() {
               return {
                 ...e,
                 status: "pending",
-                // chapa: e.chapa,
-                // cif: e.cif,
-                // date: e.date,
-                // description: values.description,
-                // id: e.id,
-                // status: "pending",
-                // totalHours: formattedHours,
-                // typeId: values.typeId,
-                // typeValue: values.typeValue,
-                // user: e.user,
-                // dataId: e.dataId,
-                // totalHoursInput: e.totalHoursInput,
-                // userName: e.userName,
               } as Entry;
             }
             return e;

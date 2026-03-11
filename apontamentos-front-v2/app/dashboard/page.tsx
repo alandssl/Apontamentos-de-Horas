@@ -13,6 +13,7 @@ import {
   Building,
   Plus,
   Trash2,
+  Pencil,
   CheckCircle2,
   Hourglass,
   LogOut,
@@ -69,11 +70,13 @@ import {
   ComboboxList,
 } from "@/components/ui/combobox";
 import { useDebounce } from "@/lib/useDebounce";
+import { en } from "zod/v4/locales";
 
 const formSchema = z.object({
   userName: z.string().min(1, "Nome é obrigatório"),
   cif: z.string().min(1, "CIF da empresa é obrigatório"),
-  type: z.string().min(1, "Tipo de apontamento é obrigatório"),
+  typeId: z.string().min(1, "Tipo de apontamento é obrigatório"),
+  typeValue: z.string().optional(),
   description: z.string().optional(),
   date: z.date({
     message: "Uma data é necessária.",
@@ -93,9 +96,11 @@ type Entry = z.infer<typeof formSchema> & {
   totalHours: string; // Formatting ensured on submit
   status: EntryStatus;
   date: Date;
+  dataId: string;
   chapa: string;
   cif: string;
-  type?: string;
+  typeId?: string;
+  typeValue?: string;
   description?: string;
   user: { nome: string; id: string };
 };
@@ -107,6 +112,8 @@ export default function Dashboard() {
   );
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // API Data States
   const [cifOptions, setCifOptions] = useState<
@@ -137,6 +144,10 @@ export default function Dashboard() {
   }, [debouncedQuery]);
 
   useEffect(() => {
+    console.log(entries);
+  }, [entries]);
+
+  useEffect(() => {
     setDebouncedQueryValues(cifOptions.slice(0, 100));
   }, [cifOptions, isDialogOpen]);
 
@@ -150,7 +161,9 @@ export default function Dashboard() {
       userName: "",
       totalHoursInput: "",
       description: "",
-      type: "",
+      typeId: "",
+      typeValue: "",
+      cif: "",
     },
   });
 
@@ -261,6 +274,7 @@ export default function Dashboard() {
       fetch(`http://${window.location.hostname}:8080/horas`)
         .then((res) => res.json())
         .then((data) => {
+          console.log(data);
           const fetchedEntries: [Entry] = data.map((h: any) => ({
             id: String(h.id),
             date: new Date(
@@ -268,14 +282,21 @@ export default function Dashboard() {
                 ? h.dataApontamentoId.data + "T00:00:00"
                 : new Date(),
             ),
-            cif: h.cif || "Indefinido",
+            dataId: String(h.dataApontamentoId?.id),
+            cif: h.cif || "",
             chapa: h.dataApontamentoId?.chapa,
             totalHours: h.horasEfetivas,
-            status: h.dataApontamentoId?.dataAprovacao ? "approved" : "pending",
-            type: String(h.tipoId?.tipo) || "Indefinido",
-            description: h.detalhe || "Indefinido",
+            status: h.dataApontamentoId?.dataAprovacao
+              ? "approved"
+              : h.dataApontamentoId?.dataRejeitada
+                ? "rejected"
+                : "pending",
+            type: String(h.tipoId?.tipo) || "",
+            typeId: String(h.tipoId?.id) || "",
+            typeValue: String(h.tipoId?.tipo) || "",
+            description: h.detalhe || "",
             user: {
-              nome: h.usuarioId?.nome || "Indefinido",
+              nome: h.usuarioId?.nome || "",
               id: String(h.usuarioId?.id),
             },
           }));
@@ -351,7 +372,6 @@ export default function Dashboard() {
   //   console.log(watchedUserName);
   // }, [currentUserEntries]);
 
-  // Calculate stats for the selected date
   const selectedDateEntries = currentUserEntries.filter(
     (e) =>
       selectedDate &&
@@ -389,59 +409,123 @@ export default function Dashboard() {
       },
       cif: values.cif.split(" - ")[0],
       date: values.date,
+      dataId: "", // Will be set after API response
       description: values.description,
-      type: values.type,
+      typeId: values.typeId,
+      typeValue: values.typeValue,
     };
 
     try {
       // Find the correct references for the API POST
-      const tipoObj = typeOptions.find((t) => t.value === values.type);
+      const tipoObj = typeOptions.find((t) => t.value === values.typeId);
 
-      // Call API
-
-      console.log({
+      const payload = {
         horasEfetivas: formattedHours,
         cif: values.cif.split(" - ")[0], // CIF
         detalhe: values.description, // CIF
         data: format(values.date, "yyyy-MM-dd"),
-        tipoId: Number(values.type),
+        tipoId: String(values.typeId),
         usuarioId: session.userId,
         chapa: values.userName.split(" - ")[0],
-      });
-      const response = await fetch(
-        `http://${window.location.hostname}:8080/horas`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            horasEfetivas: formattedHours,
-            cif: values.cif.split(" - ")[0], // CIF
-            detalhe: values.description, // CIF
-            data: format(values.date, "yyyy-MM-dd"),
-            tipoId: Number(values.type),
-            usuarioId: session.userId,
-            chapa: values.userName.split(" - ")[0],
+      };
+
+      if (isEditing && editingId) {
+        console.log(editingId);
+        console.log(payload);
+        const response = await fetch(
+          `http://${window.location.hostname}:8080/horas/${editingId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        );
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || "Erro ao atualizar no servidor");
+        }
+        const responseData = await response.json();
+
+        newEntry.dataId = responseData.dataApontamentoId?.id;
+
+        entries.find((e) => e.dataId === responseData.dataApontamentoId?.id);
+
+        setEntries(
+          entries.map((e) => {
+            if (e.dataId == responseData.dataApontamentoId?.id) {
+              console.log(e.date);
+              console.log(e.totalHours);
+              return {
+                ...e,
+                status: "pending",
+                // chapa: e.chapa,
+                // cif: e.cif,
+                // date: e.date,
+                // description: values.description,
+                // id: e.id,
+                // status: "pending",
+                // totalHours: formattedHours,
+                // typeId: values.typeId,
+                // typeValue: values.typeValue,
+                // user: e.user,
+                // dataId: e.dataId,
+                // totalHoursInput: e.totalHoursInput,
+                // userName: e.userName,
+              } as Entry;
+            }
+            return e;
           }),
-        },
-      );
+        );
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Erro ao salvar no servidor");
+        setEntries(
+          entries.map((e) =>
+            e.id === editingId ? { ...newEntry, id: editingId } : e,
+          ),
+        );
+
+        toast.success("Apontamento atualizado!", {
+          description: `${formattedHours}h - ${values.cif} (Atualizado no banco)`,
+        });
+      } else {
+        const response = await fetch(
+          `http://${window.location.hostname}:8080/horas`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        );
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || "Erro ao salvar no servidor");
+        }
+
+        // Limpa os registros locais antigos rejeitados deste dia para liberar a ui
+        const updatedEntries = entries.filter(
+          (e) =>
+            !(
+              e.status === "rejected" &&
+              format(e.date, "yyyy-MM-dd") === format(values.date, "yyyy-MM-dd")
+            ),
+        );
+        setEntries([...updatedEntries, newEntry]);
+
+        toast.success("Apontamento registrado!", {
+          description: `${formattedHours}h - ${values.cif} (Salvo no banco)`,
+        });
       }
-
-      // Append new entry instead of replacing
-      setEntries([...entries, newEntry]);
-
-      toast.success("Apontamento registrado!", {
-        description: `${formattedHours}h - ${values.cif} (Salvo no banco)`,
-      });
 
       setDebouncedQueryValues(cifOptions.slice(0, 100));
 
+      setIsEditing(false);
+      setEditingId(null);
+
       form.reset({
         ...values,
-        type: "",
+        typeId: "",
+        typeValue: "",
         cif: "",
         totalHoursInput: "",
         description: "",
@@ -451,10 +535,9 @@ export default function Dashboard() {
       toast.error("Erro ao salvar apontamento", { description: error.message });
     }
   }
-
   const deleteEntry = async (id: string, status: EntryStatus) => {
-    if (status === "approved") {
-      toast.error("Não é possível remover apontamentos aprovados.");
+    if (status === "approved" || status === "rejected") {
+      toast.error("Não é possível remover apontamentos já processados.");
       return;
     }
 
@@ -478,6 +561,33 @@ export default function Dashboard() {
         description: error.message,
       });
     }
+  };
+
+  const editEntry = (entry: Entry) => {
+    console.log(entry);
+    // if (entry.status === "approved" || entry.status === "rejected") {
+    if (entry.status === "approved") {
+      toast.error("Não é possível editar apontamentos já processados.");
+      return;
+    }
+
+    console.log(entry);
+
+    form.reset({
+      userName: form.getValues("userName"),
+      cif: cifOptions.find((c) => c.value === entry.cif)?.label || entry.cif,
+      typeId: entry.typeId,
+      typeValue: entry.typeValue,
+      date: entry.date,
+      totalHoursInput: entry.totalHours,
+      description: entry.description || "",
+    });
+
+    setIsEditing(true);
+    setEditingId(entry.id);
+    toast.info(
+      "Apontamento carregado para edição. Salve novamente para confirmar.",
+    );
   };
 
   // Helper to check if a date has an entry
@@ -533,6 +643,14 @@ export default function Dashboard() {
                     <div className="w-3 h-3 rounded-md bg-rose-600"></div>
                     <span>3+ dias sem apontar</span>
                   </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-red-600 flex items-center justify-center text-white text-[9px] font-bold">
+                      !
+                    </div>
+                    <span className="text-red-600 font-semibold">
+                      Rejeitado
+                    </span>
+                  </div>
                 </div>
               </CardDescription>
 
@@ -571,10 +689,39 @@ export default function Dashboard() {
                     selected={selectedDate}
                     onSelect={onDateSelect}
                     disabled={(date) => {
+                      const hasRejectedOnThisDate = currentUserEntries.some(
+                        (e) =>
+                          e.status === "rejected" &&
+                          format(e.date, "yyyy-MM-dd") ===
+                            format(date, "yyyy-MM-dd"),
+                      );
+                      if (hasRejectedOnThisDate) {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const diffTime = Math.abs(
+                          today.getTime() - date.getTime(),
+                        );
+                        const diffDays = Math.ceil(
+                          diffTime / (1000 * 60 * 60 * 24),
+                        );
+                        if (diffDays <= 7) return false;
+                      }
+
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
-                      const fortyDaysAgo = subDays(today, 40);
-                      return date > new Date() || date < fortyDaysAgo;
+
+                      let limitDate = new Date();
+                      limitDate.setHours(0, 0, 0, 0);
+                      let count = 0;
+                      while (count < 2) {
+                        limitDate.setDate(limitDate.getDate() - 1);
+                        const day = limitDate.getDay();
+                        if (day !== 0 && day !== 6) {
+                          count++;
+                        }
+                      }
+
+                      return date > new Date() || date < limitDate;
                     }}
                     className="rounded-xl border shadow-sm p-3 sm:p-6 w-full max-w-full overflow-hidden h-fit flex justify-center [--cell-size:11.5vw] sm:[--cell-size:60px] md:[--cell-size:75px] text-base sm:text-lg"
                     classNames={{
@@ -653,6 +800,14 @@ export default function Dashboard() {
                         }
                         return workDaysPassed > 0 && workDaysPassed < 3;
                       },
+                      rejectedDate: (date) => {
+                        const dayEntries = currentUserEntries.filter(
+                          (e) =>
+                            format(e.date, "yyyy-MM-dd") ===
+                            format(date, "yyyy-MM-dd"),
+                        );
+                        return dayEntries.some((e) => e.status === "rejected");
+                      },
                     }}
                     modifiersClassNames={{
                       hasEntry:
@@ -663,6 +818,8 @@ export default function Dashboard() {
                         "bg-yellow-300 text-yellow-950 border border-yellow-400 font-bold rounded-md",
                       dangerGap:
                         "bg-rose-600 text-white border border-rose-700 font-bold rounded-md",
+                      rejectedDate:
+                        "ring-2 ring-red-500 ring-offset-1 ring-offset-background text-red-700 bg-red-100 dark:bg-red-900/40 font-bold !rounded-[0.4rem] border-0 after:absolute after:-top-1 after:-right-1 after:w-4 after:h-4 after:bg-red-600 after:text-white after:flex after:items-center after:justify-center after:rounded-full after:content-['!'] after:text-[10px] after:leading-none after:font-bold after:shadow-sm after:border after:border-white dark:after:border-background z-10",
                     }}
                     modifiersStyles={{
                       partialEntry: {
@@ -845,19 +1002,18 @@ export default function Dashboard() {
 
               {/* Existing Entries List */}
               {selectedDateEntries.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium max-w-full">
-                    Registros do Dia:
-                  </h3>
-                  {selectedDateEntries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex items-center justify-between p-3 border rounded bg-background text-sm"
-                    >
-                      <div className="flex-1 min-w-0 pr-3">
-                        <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 w-full min-w-0">
+                  <h3 className="text-sm font-medium">Registros do Dia:</h3>
+                  {selectedDateEntries
+                    .filter((e) => e.id !== editingId)
+                    .map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex items-center justify-between p-2 sm:p-3 border rounded bg-background text-sm w-full min-w-0 gap-2"
+                      >
+                        <div className="flex flex-1 items-center gap-2 min-w-0">
                           <p
-                            className="font-medium truncate max-w-[100px] overflow-hidden text-ellipsis sm:max-w-[200px] md:max-w-[350px]"
+                            className="font-medium truncate min-w-0 flex-1 text-[13px] sm:text-sm"
                             title={
                               cifOptions.find((c) => c.value === entry.cif)
                                 ?.label || entry.cif
@@ -874,6 +1030,13 @@ export default function Dashboard() {
                               >
                                 Aprovado
                               </Badge>
+                            ) : entry.status === "rejected" ? (
+                              <Badge
+                                variant="destructive"
+                                className="text-[10px] h-5 px-1.5 whitespace-nowrap"
+                              >
+                                Rejeitado
+                              </Badge>
                             ) : (
                               <Badge
                                 variant="secondary"
@@ -884,27 +1047,40 @@ export default function Dashboard() {
                             )}
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                        <span className="font-bold">{entry.totalHours}h</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className={cn(
-                            "h-8 w-8",
-                            entry.status === "approved"
-                              ? "text-muted-foreground opacity-50 cursor-not-allowed"
-                              : "text-destructive",
+                        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                          <span className="font-bold">{entry.totalHours}h</span>
+                          {entry.status === "pending" ||
+                          entry.status === "rejected" ? (
+                            <>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                onClick={() => editEntry(entry)}
+                                title="Editar apontamento"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                onClick={() =>
+                                  deleteEntry(entry.id, entry.status)
+                                }
+                                title="Excluir apontamento"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <></>
                           )}
-                          onClick={() => deleteEntry(entry.id, entry.status)}
-                          disabled={entry.status === "approved"}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
 
@@ -919,7 +1095,7 @@ export default function Dashboard() {
                   onSubmit={form.handleSubmit(onSubmit)}
                   className="space-y-4"
                 >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full overflow-hidden">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
                     <FormField
                       control={form.control}
                       name="userName"
@@ -940,46 +1116,58 @@ export default function Dashboard() {
                     <FormField
                       control={form.control}
                       name="cif"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Empresa (CIF)</FormLabel>
-                          <FormControl>
-                            <Combobox
-                              items={
-                                debouncedQueryValues
-                                // debouncedQuery.length == 0
-                                //   ? cifOptions.slice(0, 100)
-                                //   : debouncedQuery
-                              }
-                              onInputValueChange={(e) =>
-                                handleDebouncedInputChange(e, field.onChange)
-                              }
-                            >
-                              <ComboboxInput
-                                //   value={formCifValue}
-                                placeholder="Digite a CIF"
-                              />
-                              <ComboboxContent>
-                                <ComboboxEmpty>
-                                  CIF não encontrada
-                                </ComboboxEmpty>
-                                <ComboboxList>
-                                  {(item) => (
-                                    <ComboboxItem
-                                      className="odd:bg-zinc-300"
-                                      key={item.label}
-                                      value={item.label}
-                                    >
-                                      {item.label}
-                                    </ComboboxItem>
-                                  )}
-                                </ComboboxList>
-                              </ComboboxContent>
-                            </Combobox>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+                      render={({ field }) => {
+                        field.value =
+                          typeof field.value == "undefined" ? "" : field.value;
+                        return (
+                          <FormItem>
+                            <FormLabel>Empresa (CIF)</FormLabel>
+                            <FormControl>
+                              <Combobox
+                                value={field.value}
+                                // inputValue={field.value}
+                                // defaultInputValue={field.value}
+                                items={
+                                  debouncedQueryValues
+                                  // debouncedQuery.length == 0
+                                  //   ? cifOptions.slice(0, 100)
+                                  //   : debouncedQuery
+                                }
+                                onInputValueChange={(e) =>
+                                  handleDebouncedInputChange(e, field.onChange)
+                                }
+                              >
+                                <ComboboxInput
+                                  //   value={formCifValue}
+                                  placeholder="Digite a CIF"
+                                  value={
+                                    typeof field.value == "undefined"
+                                      ? ""
+                                      : field.value
+                                  }
+                                />
+                                <ComboboxContent>
+                                  <ComboboxEmpty>
+                                    CIF não encontrada
+                                  </ComboboxEmpty>
+                                  <ComboboxList>
+                                    {(item) => (
+                                      <ComboboxItem
+                                        className="odd:bg-zinc-300"
+                                        key={item.label}
+                                        value={item.label}
+                                      >
+                                        {item.label}
+                                      </ComboboxItem>
+                                    )}
+                                  </ComboboxList>
+                                </ComboboxContent>
+                              </Combobox>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
                     />
                   </div>
 
@@ -1005,52 +1193,55 @@ export default function Dashboard() {
                     )}
                   />
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full overflow-hidden">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
                     <FormField
                       control={form.control}
-                      name="type"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tipo de Apontamento</FormLabel>
-                          <FormControl>
-                            <div className="relative w-full max-w-full min-w-0 overflow-hidden">
-                              <select
-                                className="flex h-10 w-full min-w-0 appearance-none rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 text-ellipsis overflow-hidden whitespace-nowrap"
-                                value={field.value}
-                                onChange={field.onChange}
-                              >
-                                <option value="" disabled hidden>
-                                  Selecione o tipo
-                                </option>
-                                {typeOptions.map((option) => (
-                                  <option
-                                    key={option.value}
-                                    value={option.value}
-                                  >
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground">
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
+                      name="typeId"
+                      render={({ field }) => {
+                        console.log(field.value);
+                        return (
+                          <FormItem>
+                            <FormLabel>Tipo de Apontamento</FormLabel>
+                            <FormControl>
+                              <div className="relative w-full max-w-full min-w-0 overflow-hidden">
+                                <select
+                                  className="flex h-10 w-full min-w-0 appearance-none rounded-md border border-input bg-background pl-3 pr-8 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 text-ellipsis overflow-hidden whitespace-nowrap"
+                                  value={field.value}
+                                  onChange={field.onChange}
                                 >
-                                  <path d="m6 9 6 6 6-6" />
-                                </svg>
+                                  <option value="" disabled hidden>
+                                    Selecione o tipo
+                                  </option>
+                                  {typeOptions.map((option) => (
+                                    <option
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground">
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="m6 9 6 6 6-6" />
+                                  </svg>
+                                </div>
                               </div>
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
                     />
 
                     <FormField
@@ -1101,19 +1292,42 @@ export default function Dashboard() {
                     </p>
                   </div>
 
-                  <DialogFooter>
-                    <Button type="submit" className="w-full">
-                      Adicionar Apontamento
-                    </Button>
-                  </DialogFooter>
+                  <div className="flex flex-col gap-3 relative pt-2">
+                    <div className="flex flex-col sm:flex-row gap-3 w-full">
+                      <Button type="submit" className="w-full sm:flex-1">
+                        {isEditing ? "Salvar Ajuste" : "Adicionar Apontamento"}
+                      </Button>
+                      {isEditing && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full sm:flex-1"
+                          onClick={() => {
+                            setIsEditing(false);
+                            setEditingId(null);
+                            const currentFormUserName =
+                              form.getValues("userName");
+                            form.reset({
+                              userName: currentFormUserName,
+                              typeId: "",
+                              typeValue: "",
+                              cif: "",
+                              totalHoursInput: "",
+                              description: "",
+                            });
+                          }}
+                        >
+                          Cancelar Edição
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </form>
               </Form>
             </DialogContent>
           </Dialog>
         </div>
-      ) : (
-        <></>
-      )}
+      ) : null}
     </>
   );
 }

@@ -19,7 +19,6 @@ import api.apontamentos.entity.HoraApontamentos;
 import api.apontamentos.service.HoraApontamentosService;
 import lombok.RequiredArgsConstructor;
 
-
 @RestController
 @RequestMapping("/horas")
 @RequiredArgsConstructor
@@ -29,18 +28,18 @@ public class HoraApontamentoController {
     private final HoraApontamentosService service;
 
     @GetMapping
-    public List<HoraApontamentos> listarAtivos(){
+    public List<HoraApontamentos> listarAtivos() {
         return service.buscarTodosAtivos();
     }
 
     @PostMapping
-    public ResponseEntity<HoraApontamentos> salvarHoras(@RequestBody HoraApontamentoDTO dto){
+    public ResponseEntity<HoraApontamentos> salvarHoras(@RequestBody HoraApontamentoDTO dto) {
         HoraApontamentos salvo = service.salvar(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(salvo);
     }
 
     @DeleteMapping("/{id}")
-    public void deletarHora(@PathVariable Long id){
+    public void deletarHora(@PathVariable Long id) {
         HoraApontamentos hora = service.buscarPorId(id);
         Long dataId = hora.getDataApontamentoId().getId();
         service.deletar(id);
@@ -48,7 +47,8 @@ public class HoraApontamentoController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<HoraApontamentos> atualizarHora(@RequestBody HoraApontamentos horas, @PathVariable Long id){
+    public ResponseEntity<HoraApontamentos> atualizarHora(@RequestBody HoraApontamentoDTO horas,
+            @PathVariable Long id) {
         HoraApontamentos atualizado = service.atualizar(id, horas);
 
         return ResponseEntity.ok(atualizado);

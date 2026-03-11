@@ -4,14 +4,14 @@ import { cookies } from "next/headers";
 import { sessionOptions, SessionData } from "@/lib/session";
 
 // This function can be marked `async` if using `await` inside
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const res = NextResponse.next();
   const session = await getIronSession<SessionData>(
     await cookies(),
     sessionOptions,
   );
 
-  const isLoginPage = request.nextUrl.pathname === '/login';
+  const isLoginPage = request.nextUrl.pathname === "/login";
 
   if (!session.isLoggedIn && !isLoginPage) {
     return NextResponse.redirect(new URL("/login", request.url));

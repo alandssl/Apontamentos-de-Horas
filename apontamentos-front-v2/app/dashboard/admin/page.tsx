@@ -79,9 +79,7 @@ const TYPE_LABELS: Record<string, string> = {
 export default function AdminAprovalPage() {
   const [entries, setEntries] = useState<AdminEntry[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [dateFilter, setDateFilter] = useState("all");
-  const [customStartDate, setCustomStartDate] = useState("");
-  const [customEndDate, setCustomEndDate] = useState("");
+  // Date filters removed
   const [userId, setUserId] = useState<string | null>(null);
   const [loggedUserName, setLoggedUserName] = useState<string | null>(null);
 
@@ -116,16 +114,17 @@ export default function AdminAprovalPage() {
             fetch(`http://${window.location.hostname}:8080/horas`)
               .then((res) => res.json())
               .then((data) => {
-                console.log(data);
                 const fetchedEntries = data.map((h: any) => ({
                   id: String(h.id),
                   dataId: String(h.dataApontamentoId?.id),
-                  date: new Date(h.dataApontamentoId?.data || new Date()),
+                  date: h.dataApontamentoId?.data ? new Date(h.dataApontamentoId.data.split('T')[0] + 'T12:00:00') : new Date(),
                   cif: h.cif,
                   totalHours: h.horasEfetivas,
                   status: h.dataApontamentoId?.dataAprovacao
                     ? "approved"
-                    : "pending",
+                    : h.dataApontamentoId?.dataRejeitada
+                      ? "rejected"
+                      : "pending",
                   type: String(h.tipoId?.tipo),
                   description: h.detalhe,
                   chapa: h.dataApontamentoId?.chapa,
@@ -178,7 +177,7 @@ export default function AdminAprovalPage() {
         //               .map((h: any) => ({
         //                 id: String(h.id),
         //                 dataId: String(h.dataApontamentoId?.id),
-        //                 date: new Date(h.dataApontamentoId?.data || new Date()),
+        //                 date: h.dataApontamentoId?.data ? new Date(h.dataApontamentoId.data.split('T')[0] + 'T12:00:00') : new Date(),
         //                 cif: h.detalhe || "Indefinido",
         //                 totalHours: h.horasEfetivas,
         //                 status: h.dataApontamentoId?.dataAprovacao
@@ -207,8 +206,7 @@ export default function AdminAprovalPage() {
     console.log(entries);
   }, [entries]);
 
-  const handleApprove = async (
-    id: string,
+  const handleApproveDay = async (
     dataId: string,
     userName: string,
   ) => {
@@ -230,15 +228,15 @@ export default function AdminAprovalPage() {
       if (!response.ok) throw new Error("Falha no servidor");
 
       setEntries((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, status: "approved" } : e)),
+        prev.map((e) => (e.dataId === dataId ? { ...e, status: "approved" } : e)),
       );
-      toast.success(`Apontamento aprovado!`);
+      toast.success(`Apontamentos do dia aprovados!`);
     } catch (error: any) {
       toast.error("Erro ao aprovar.", { description: error.message });
     }
   };
 
-  const handleReject = async (id: string, dataId: string, userName: string) => {
+  const handleRejectDay = async (dataId: string, userName: string) => {
     if (!userId) return toast.error("Usuário não identificado.");
 
     try {
@@ -254,9 +252,9 @@ export default function AdminAprovalPage() {
       if (!response.ok) throw new Error("Falha no servidor");
 
       setEntries((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, status: "rejected" } : e)),
+        prev.map((e) => (e.dataId === dataId ? { ...e, status: "rejected" } : e)),
       );
-      toast.success(`Apontamento rejeitado!`);
+      toast.success(`Apontamentos do dia rejeitados!`);
     } catch (error: any) {
       toast.error("Erro ao rejeitar.", { description: error.message });
     }
@@ -270,7 +268,7 @@ export default function AdminAprovalPage() {
 
     try {
       const userId = await getSessionData().then((session) => session?.userId);
-      const ids = filteredEntries.map((entry) => Number(entry.dataId));
+      const ids = pendingEntries.map((entry) => Number(entry.dataId));
 
       await Promise.all(
         pendingEntries.map((e) =>
@@ -318,68 +316,55 @@ export default function AdminAprovalPage() {
 
   const groupedData = userNames.map((userName) => {
     const userEntries = entries.filter((e) => e.userName === userName);
-    const isAllApproved = userEntries.every((e) => e.status === "approved");
+    const isAllApproved = userEntries.every((e) => e.status === "approved" || e.status === "rejected");
+
+    const hasOldPending = userEntries.some(e => {
+      if (e.status !== "pending") return false;
+      const diffTime = new Date().getTime() - e.date.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays > 7;
+    });
+
     return {
       userName,
       entries: userEntries,
       isAllApproved,
       pendingCount: userEntries.filter((e) => e.status === "pending").length,
+      hasOldPending
     };
   });
 
   // Os dados do popup e filtro das entradas:
   const activeUserData = groupedData.find((g) => g.userName === selectedUser);
 
-  const filteredEntries =
-    activeUserData?.entries.filter((entry) => {
-      const today = new Date();
-      if (dateFilter === "all") return true;
-      if (dateFilter === "7days") return isAfter(entry.date, subDays(today, 7));
-      if (dateFilter === "thisMonth")
-        return isAfter(entry.date, startOfMonth(today));
-      if (dateFilter === "lastMonth") {
-        const startOfLast = startOfMonth(subMonths(today, 1));
-        const endOfLast = endOfMonth(subMonths(today, 1));
-        return isWithinInterval(entry.date, {
-          start: startOfLast,
-          end: endOfLast,
+  // Group user entries by date locally if selected
+  const userEntriesGroupedByDate = [];
+  if (activeUserData && activeUserData.entries) {
+    // Sort entries descending by date first
+    const sortedEntries = [...activeUserData.entries].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    const groupsMap = new Map();
+    sortedEntries.forEach((entry) => {
+      const dateKey = format(entry.date, 'yyyy-MM-dd');
+      if (!groupsMap.has(dateKey)) {
+        groupsMap.set(dateKey, {
+          date: entry.date,
+          entries: []
         });
       }
-      if (dateFilter === "custom") {
-        if (!customStartDate && !customEndDate) return true;
-        let isValid = true;
-        if (customStartDate) {
-          isValid =
-            isValid &&
-            !isBefore(entry.date, startOfDay(parseISO(customStartDate)));
-        }
-        if (customEndDate) {
-          isValid =
-            isValid && !isAfter(entry.date, endOfDay(parseISO(customEndDate)));
-        }
-        return isValid;
-      }
-      return true;
-    }) || [];
+      groupsMap.get(dateKey).entries.push(entry);
+    });
+
+    userEntriesGroupedByDate.push(...Array.from(groupsMap.values()));
+  }
 
   const resetUserDialog = (open: boolean) => {
     if (!open) {
       setSelectedUser(null);
-      setDateFilter("all");
-      setCustomStartDate("");
-      setCustomEndDate("");
     }
   };
 
-  useEffect(() => {
-    console.log({
-      user: activeUserData?.userName,
-      fitro: dateFilter,
-      filteredEntries,
-      dataIni: customStartDate,
-      dataFim: customEndDate,
-    });
-  }, [dateFilter]);
+
 
   return (
     <div className="w-full max-w-4xl flex flex-col gap-6 p-4 md:gap-8 md:p-8">
@@ -493,46 +478,16 @@ export default function AdminAprovalPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-                  Filtrar período:
+                  Mostrando todos os registros
                 </span>
-                <Select value={dateFilter} onValueChange={setDateFilter}>
-                  <SelectTrigger className="w-[150px] h-8 text-xs bg-background">
-                    <SelectValue placeholder="Período" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-xs">
-                      Todos os Registros
-                    </SelectItem>
-                    <SelectItem value="7days" className="text-xs">
-                      Últimos 7 dias
-                    </SelectItem>
-                    <SelectItem value="thisMonth" className="text-xs">
-                      Este Mês
-                    </SelectItem>
-                    <SelectItem value="lastMonth" className="text-xs">
-                      Mês Passado
-                    </SelectItem>
-                    <SelectItem value="custom" className="hidden">
-                      Personalizado
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant={dateFilter === "custom" ? "secondary" : "outline"}
-                  size="icon"
-                  className={`h-8 w-8 shrink-0 ${dateFilter === "custom" ? "bg-zinc-200 dark:bg-zinc-800 border-transparent text-foreground" : "text-muted-foreground"}`}
-                  onClick={() =>
-                    setDateFilter((prev) =>
-                      prev === "custom" ? "all" : "custom",
-                    )
-                  }
-                  title="Definir datas personalizadas"
-                >
-                  <CalendarDays className="w-4 h-4" />
-                </Button>
+                {activeUserData?.hasOldPending && (
+                  <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+                    Há pendências com mais de 7 dias. Aprovação em lote desabilitada.
+                  </span>
+                )}
               </div>
 
-              {activeUserData && activeUserData.pendingCount > 0 && (
+              {activeUserData && activeUserData.pendingCount > 0 && !activeUserData.hasOldPending && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -544,127 +499,121 @@ export default function AdminAprovalPage() {
                 </Button>
               )}
             </div>
-
-            {dateFilter === "custom" && (
-              <div className="flex items-center gap-2 pt-2 border-t">
-                <span className="text-xs font-medium text-muted-foreground">
-                  De:
-                </span>
-                <Input
-                  type="date"
-                  className="h-8 text-xs w-[130px] bg-background"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                />
-                <span className="text-xs font-medium text-muted-foreground">
-                  Até:
-                </span>
-                <Input
-                  type="date"
-                  className="h-8 text-xs w-[130px] bg-background"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                />
-              </div>
-            )}
           </div>
 
-          <div className="space-y-3 mt-2">
-            {filteredEntries.map((entry) => (
-              <div
-                key={entry.id}
-                className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded-xl transition-colors gap-3 ${
-                  entry.status === "approved"
-                    ? "bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-900/50"
-                    : entry.status === "rejected"
-                      ? "bg-red-50/50 border-red-200 dark:bg-red-950/20 dark:border-red-900/50 opacity-60"
-                      : "bg-card hover:bg-accent/30"
-                }`}
-              >
-                {/* Info Panel */}
-                <div className="flex flex-col gap-1.5 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge
-                      variant="outline"
-                      className="font-semibold px-2 bg-background"
-                    >
-                      {format(entry.date, "dd/MM/yyyy")}
-                    </Badge>
-                    <div className="flex items-center gap-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 border px-2 py-0.5 rounded-sm bg-background">
-                      <Building className="w-3 h-3 text-zinc-400" />
-                      {entry.cif}
+          <div className="space-y-4 mt-4">
+            {userEntriesGroupedByDate.map((group) => (
+              <div key={format(group.date, "yyyy-MM-dd")} className="border rounded-xl bg-card overflow-hidden shadow-sm">
+                <div className="bg-zinc-100 dark:bg-zinc-800/50 px-4 py-2 font-bold text-sm border-b flex items-center justify-between">
+                  <span>{format(group.date, "dd/MM/yyyy")}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-2 text-xs font-normal">
+                      <span>
+                        {group.entries.length} registro(s)
+                      </span>
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                        Total: {group.entries.reduce((acc: number, e: AdminEntry) => {
+                          const h = parseInt(e.totalHours.split(':')[0] || '0');
+                          const m = parseInt(e.totalHours.split(':')[1] || '0');
+                          return acc + h + m / 60;
+                        }, 0).toFixed(1)}h
+                      </span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 border px-2 py-0.5 rounded-sm bg-background">
-                      <Briefcase className="w-3 h-3 text-zinc-400" />
-                      {TYPE_LABELS[entry.type] || entry.type}
-                    </div>
+
+                    {group.entries.some((e: AdminEntry) => e.status === "pending") && (
+                      <div className="flex items-center gap-2 pl-3 ml-1 border-l sm:border-l-0">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 shrink-0"
+                          onClick={() =>
+                            handleRejectDay(group.entries[0].dataId, activeUserData?.userName || "")
+                          }
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          className="h-8 w-8 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                          onClick={() =>
+                            handleApproveDay(group.entries[0].dataId, activeUserData?.userName || "")
+                          }
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
-
-                  <div className="flex items-center gap-2 ml-1">
-                    {entry.status === "approved" && (
-                      <Badge
-                        variant="secondary"
-                        className="bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-300"
-                      >
-                        Aprovado
-                      </Badge>
-                    )}
-                    {entry.status === "rejected" && (
-                      <Badge
-                        variant="secondary"
-                        className="bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300"
-                      >
-                        Rejeitado
-                      </Badge>
-                    )}
-                    {entry.status === "pending" && (
-                      <Badge
-                        variant="secondary"
-                        className="bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300"
-                      >
-                        Pendente
-                      </Badge>
-                    )}
-
-                    <span className="font-bold ml-auto text-lg pt-1">
-                      {entry.totalHours}h
-                    </span>
-                  </div>
-
-                  {entry.description && (
-                    <div className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground bg-muted/30 p-2 rounded-md border border-zinc-100 dark:border-zinc-800">
-                      <FileText className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                      <p className="italic leading-relaxed">
-                        "{entry.description}"
-                      </p>
-                    </div>
-                  )}
                 </div>
 
-                {/* Action Panel */}
-                {entry.status === "pending" && (
-                  <div className="flex items-center gap-2 sm:border-l sm:pl-3 pt-3 sm:pt-0 border-t sm:border-t-0 mt-1 sm:mt-0">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 shrink-0"
-                      onClick={() =>
-                        handleReject(entry.id, entry.dataId, entry.userName)
-                      }
+                <div className="divide-y">
+                  {group.entries.map((entry: AdminEntry) => (
+                    <div
+                      key={entry.id}
+                      className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 transition-colors gap-3 ${entry.status === "approved"
+                        ? "bg-green-50/20 dark:bg-green-950/10"
+                        : entry.status === "rejected"
+                          ? "bg-red-50/20 dark:bg-red-950/10 opacity-70"
+                          : "hover:bg-accent/30"
+                        }`}
                     >
-                      <XCircle className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      className="h-9 w-9 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
-                      onClick={() =>
-                        handleApprove(entry.id, entry.dataId, entry.userName)
-                      }
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                )}
+                      {/* Info Panel */}
+                      <div className="flex flex-col gap-1.5 flex-1 pl-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 border px-2 py-0.5 rounded-sm bg-background">
+                            <Building className="w-3 h-3 text-zinc-400" />
+                            {entry.cif}
+                          </div>
+                          <div className="flex items-center gap-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 border px-2 py-0.5 rounded-sm bg-background">
+                            <Briefcase className="w-3 h-3 text-zinc-400" />
+                            {TYPE_LABELS[entry.type] || entry.type}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {entry.status === "approved" && (
+                            <Badge
+                              variant="secondary"
+                              className="bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-300"
+                            >
+                              Aprovado
+                            </Badge>
+                          )}
+                          {entry.status === "rejected" && (
+                            <Badge
+                              variant="secondary"
+                              className="bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300"
+                            >
+                              Rejeitado
+                            </Badge>
+                          )}
+                          {entry.status === "pending" && (
+                            <Badge
+                              variant="secondary"
+                              className="bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300"
+                            >
+                              Pendente
+                            </Badge>
+                          )}
+
+                          <span className="font-bold ml-auto text-lg pt-1">
+                            {entry.totalHours}h
+                          </span>
+                        </div>
+
+                        {entry.description && (
+                          <div className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground bg-muted/30 p-2 rounded-md border border-zinc-100 dark:border-zinc-800">
+                            <FileText className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <p className="italic leading-relaxed">
+                              "{entry.description}"
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

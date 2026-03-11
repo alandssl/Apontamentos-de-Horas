@@ -42,14 +42,14 @@ public class HoraApontamentosService {
             novaData.setAtivo(true);
             novaData.setUsuarioId(usuario);
             novaData.setChapa(dto.getChapa());
-            System.out.println("novaData: " + novaData.getId() + " chapa: " + novaData.getChapa() + " data: " + novaData.getData());
+            System.out.println("novaData: " + novaData.getId() + " chapa: " + novaData.getChapa() + " data: "
+                    + novaData.getData());
 
             nova = dataRepository.save(novaData);
-        }else if(dataExiste.getAprovadorId() != null && dataExiste.getDataAprovacao() != null){
+        } else if (dataExiste.getAprovadorId() != null && dataExiste.getDataAprovacao() != null) {
             throw new RuntimeException("Apontamento já aprovado, não é possível adicionar horas a essa data.");
         } else {
             nova = dataExiste;
-
 
         }
 
@@ -64,11 +64,12 @@ public class HoraApontamentosService {
         hora.setDataApontamentoId(nova);
         hora.setAtivo(true);
         hora.setCif(dto.getCif());
-        System.out.println("id: " + hora.getId() + " dataId: " + hora.getDataApontamentoId().getId() + " usuarioId: " + hora.getUsuarioId().getId() + " tipoId: "
-         + hora.getTipoId().getId() + " horas: " + hora.getHorasEfetivas() + 
-         " detalhe: " + hora.getDetalhe() + " chapa: " + nova.getChapa() + 
-         " data: " + nova.getData());
-         
+        System.out.println("id: " + hora.getId() + " dataId: " + hora.getDataApontamentoId().getId() + " usuarioId: "
+                + hora.getUsuarioId().getId() + " tipoId: "
+                + hora.getTipoId().getId() + " horas: " + hora.getHorasEfetivas() +
+                " detalhe: " + hora.getDetalhe() + " chapa: " + nova.getChapa() +
+                " data: " + nova.getData());
+
         return repository.save(hora);
     }
 
@@ -90,13 +91,23 @@ public class HoraApontamentosService {
     }
 
     // Atualiza a hora apontada
-    public HoraApontamentos atualizar(Long id, HoraApontamentos horaApontamentosAtualizado) {
+    public HoraApontamentos atualizar(Long id, HoraApontamentoDTO horaApontamentosAtualizado) {
         HoraApontamentos horaApontamentos = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
+        
+        DataApontamentos dataApontamento = horaApontamentos.getDataApontamentoId();
+
+        System.out.println(horaApontamentosAtualizado.getTipoId());
+
+        Tipo tipo = tipoRepository.findById(horaApontamentosAtualizado.getTipoId())
+                .orElseThrow(() -> new RuntimeException("Tipo não encontrado"));
 
         horaApontamentos.setHorasEfetivas(horaApontamentosAtualizado.getHorasEfetivas());
         horaApontamentos.setDetalhe(horaApontamentosAtualizado.getDetalhe());
-        horaApontamentos.setTipoId(horaApontamentosAtualizado.getTipoId());
+        horaApontamentos.setTipoId(tipo);
+        horaApontamentos.setCif(horaApontamentosAtualizado.getCif());
+        dataApontamento.setDataRejeitada(null);
+        
 
         return repository.save(horaApontamentos);
     }
@@ -106,13 +117,13 @@ public class HoraApontamentosService {
     @Transactional
     public void editarHoraApontamentos(Long horaId) {
         HoraApontamentos hora = repository.findById(horaId)
-        .orElseThrow(() -> new RuntimeException("Hora não encontrada"));
+                .orElseThrow(() -> new RuntimeException("Hora não encontrada"));
 
         DataApontamentos data = hora.getDataApontamentoId();
 
         repository.delete(hora);
 
-        boolean existeHoraAtiva =repository.existsByDataApontamentoIdAndAtivoTrue(data);
+        boolean existeHoraAtiva = repository.existsByDataApontamentoIdAndAtivoTrue(data);
 
         if (!existeHoraAtiva) {
             dataRepository.delete(data);
@@ -123,12 +134,6 @@ public class HoraApontamentosService {
         return repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
     }
-
-    // public List<HoraApontamentos> buscarPorDataApontamentoId(Long dataId) {
-    //     DataApontamentos data = dataRepository.findById(dataId)
-    //             .orElseThrow(() -> new RuntimeException("Data de apontamento não encontrada com id: " + dataId));
-    //     return repository.findByDataApontamentoIdAndAtivoTrue(data);
-    // }
 
      public HoraApontamentos atualizarApontamentoRejeitado(Long id, HoraApontamentos horaApontamentosAtualizado) {
         HoraApontamentos horaApontamentos = repository.findById(id)

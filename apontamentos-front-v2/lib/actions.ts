@@ -4,6 +4,15 @@ import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { sessionOptions, SessionData } from "@/lib/session";
 import { redirect } from "next/navigation";
+import webpush from "web-push";
+
+webpush.setVapidDetails(
+  "https://192.168.10.108:3000",
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+  process.env.VAPID_PRIVATE_KEY!,
+);
+
+let subscription: PushSubscription | null = null;
 
 export async function loginAction(_: unknown, formData: FormData) {
   const rawEmail = formData.get("email")?.toString() || "";
@@ -17,7 +26,9 @@ export async function loginAction(_: unknown, formData: FormData) {
   let redirectPath = "";
 
   try {
-    const response = await fetch("http://localhost:8080/user/" + email, { cache: "no-store" });
+    const response = await fetch("http://localhost:8080/user/" + email, {
+      cache: "no-store",
+    });
 
     if (response.ok) {
       const user = await response.json();
@@ -47,7 +58,9 @@ export async function loginAction(_: unknown, formData: FormData) {
         session.nome = user.nome;
 
         // Verifica se aprovador é true ou a string "True" ou valor válido que identifica admin
-        session.isAdmin = user.aprovador === true || String(user.aprovador).toLowerCase() === "true";
+        session.isAdmin =
+          user.aprovador === true ||
+          String(user.aprovador).toLowerCase() === "true";
         await session.save();
 
         redirectPath = "/dashboard";
@@ -83,7 +96,7 @@ export async function getSessionData() {
     sessionOptions,
   );
 
-  // Convert strictly to plain object to avoid Next.js Error: 
+  // Convert strictly to plain object to avoid Next.js Error:
   // "Only plain objects can be passed to Client Components from Server Components"
   return {
     userId: session.userId,
@@ -94,3 +107,37 @@ export async function getSessionData() {
   };
 }
 
+export async function subscribeUser(sub: PushSubscription) {
+  subscription = sub;
+  // In a production environment, you would want to store the subscription in a database
+  // For example: await db.subscriptions.create({ data: sub })
+  return { success: true };
+}
+
+export async function unsubscribeUser() {
+  subscription = null;
+  // In a production environment, you would want to remove the subscription from the database
+  // For example: await db.subscriptions.delete({ where: { ... } })
+  return { success: true };
+}
+
+export async function sendNotification(message: string) {
+  if (!subscription) {
+    throw new Error("No subscription available");
+  }
+
+  try {
+    await webpush.sendNotification(
+      subscription,
+      JSON.stringify({
+        title: "Test Notification",
+        body: message,
+        icon: "/icon.png",
+      }),
+    );
+    return { success: true };
+  } catch (error) {
+    console.error("Error sending push notification:", error);
+    return { success: false, error: "Failed to send notification" };
+  }
+}

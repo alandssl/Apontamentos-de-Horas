@@ -39,11 +39,12 @@ public class HoraApontamentoController {
     }
 
     @DeleteMapping("/{id}")
-    public void deletarHora(@PathVariable Long id) {
-        HoraApontamentos hora = service.buscarPorId(id);
-        Long dataId = hora.getDataApontamentoId().getId();
-        service.deletar(id);
-        service.editarHoraApontamentos(dataId);
+    public ResponseEntity<String> deletarHora(@PathVariable Long id) {
+        // HoraApontamentos hora = service.buscarPorId(id);
+        // Long dataId = hora.getDataApontamentoId().getId();
+        ResponseEntity<String> response = service.deletar(id);
+        service.editarHoraApontamentos(id);
+        return response;
     }
 
     @PutMapping("/{id}")
@@ -56,7 +57,7 @@ public class HoraApontamentoController {
 
     @PutMapping("/editar-rejeitada/{id}")
     public ResponseEntity<HoraApontamentos> editarHoraRejeitada(@PathVariable Long id,
-        @RequestBody HoraApontamentos horaAtualizada) {
+            @RequestBody HoraApontamentos horaAtualizada) {
         HoraApontamentos horaApontamentos = service.atualizarApontamentoRejeitado(id, horaAtualizada);
         return ResponseEntity.ok(horaApontamentos);
     }

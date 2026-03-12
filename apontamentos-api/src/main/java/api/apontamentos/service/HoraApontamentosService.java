@@ -3,6 +3,8 @@ package api.apontamentos.service;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import api.apontamentos.dto.HoraApontamentoDTO;
@@ -80,24 +82,33 @@ public class HoraApontamentosService {
 
     // Deleta pelo Id, não exclui do banco porem marca como falso e marca a data da
     // exclsão no banco
-    public void deletar(Long id) {
+    public ResponseEntity<String> deletar(Long id) {
         HoraApontamentos horaApontamentos = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
+
+        if (horaApontamentos.getDataApontamentoId().getDataAprovacao() != null) {
+            return new ResponseEntity<String>("Apontamento já aprovado, não é possível deletar.",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        if (horaApontamentos.getDataApontamentoId().getDataRejeitada() != null) {
+            return new ResponseEntity<String>("Apontamento já rejeitado, não é possível deletar.",
+                    HttpStatus.BAD_REQUEST);
+        }
 
         horaApontamentos.setAtivo(false);
         horaApontamentos.setDataExclusao(LocalDateTime.now());
 
         repository.save(horaApontamentos);
+        return new ResponseEntity<String>("Apontamento deletado com sucesso.", HttpStatus.OK);
     }
 
     // Atualiza a hora apontada
     public HoraApontamentos atualizar(Long id, HoraApontamentoDTO horaApontamentosAtualizado) {
         HoraApontamentos horaApontamentos = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
-        
-        DataApontamentos dataApontamento = horaApontamentos.getDataApontamentoId();
 
-        System.out.println(horaApontamentosAtualizado.getTipoId());
+        DataApontamentos dataApontamento = horaApontamentos.getDataApontamentoId();
 
         Tipo tipo = tipoRepository.findById(horaApontamentosAtualizado.getTipoId())
                 .orElseThrow(() -> new RuntimeException("Tipo não encontrado"));
@@ -106,8 +117,9 @@ public class HoraApontamentosService {
         horaApontamentos.setDetalhe(horaApontamentosAtualizado.getDetalhe());
         horaApontamentos.setTipoId(tipo);
         horaApontamentos.setCif(horaApontamentosAtualizado.getCif());
-        dataApontamento.setDataRejeitada(null);
-        
+        if (dataApontamento.getDataRejeitada() != null) {
+            dataApontamento.setAguardandoAjuste(false);
+        }
 
         return repository.save(horaApontamentos);
     }
@@ -121,13 +133,15 @@ public class HoraApontamentosService {
 
         DataApontamentos data = hora.getDataApontamentoId();
 
-        repository.delete(hora);
-
         boolean existeHoraAtiva = repository.existsByDataApontamentoIdAndAtivoTrue(data);
-
+        System.out.println("existeHoraAtiva: " + existeHoraAtiva);
         if (!existeHoraAtiva) {
-            dataRepository.delete(data);
+            data.setAtivo(false);
+            data.setDataExclusao(LocalDateTime.now());
+            dataRepository.save(data);
         }
+
+        repository.delete(hora);
     }
 
     public HoraApontamentos buscarPorId(Long id) {
@@ -135,7 +149,7 @@ public class HoraApontamentosService {
                 .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
     }
 
-     public HoraApontamentos atualizarApontamentoRejeitado(Long id, HoraApontamentos horaApontamentosAtualizado) {
+    public HoraApontamentos atualizarApontamentoRejeitado(Long id, HoraApontamentos horaApontamentosAtualizado) {
         HoraApontamentos horaApontamentos = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Apontamento não encontrado com id: " + id));
         DataApontamentos dataApontamento = horaApontamentos.getDataApontamentoId();
@@ -147,5 +161,5 @@ public class HoraApontamentosService {
         }
         return repository.save(horaApontamentos);
     }
-    
+
 }

@@ -95,6 +95,7 @@ type Entry = z.infer<typeof formSchema> & {
   id: string;
   totalHours: string; // Formatting ensured on submit
   status: EntryStatus;
+  aguardandoAjuste?: boolean;
   date: Date;
   dataId: string;
   chapa: string;
@@ -143,9 +144,7 @@ export default function Dashboard() {
     setDebouncedQueryValues(debouncedQuery);
   }, [debouncedQuery]);
 
-  useEffect(() => {
-    console.log(entries);
-  }, [entries]);
+
 
   useEffect(() => {
     setDebouncedQueryValues(cifOptions.slice(0, 100));
@@ -166,6 +165,7 @@ export default function Dashboard() {
       cif: "",
     },
   });
+
 
   // Fetch session and APIs
   useEffect(() => {
@@ -288,9 +288,10 @@ export default function Dashboard() {
             totalHours: h.horasEfetivas,
             status: h.dataApontamentoId?.dataAprovacao
               ? "approved"
-              : h.dataApontamentoId?.dataRejeitada
+              : h.dataApontamentoId?.dataRejeitada && h.dataApontamentoId?.aguardandoAjuste
                 ? "rejected"
                 : "pending",
+            aguardandoAjuste: h.dataApontamentoId?.aguardandoAjuste,
             type: String(h.tipoId?.tipo) || "",
             typeId: String(h.tipoId?.id) || "",
             typeValue: String(h.tipoId?.tipo) || "",
@@ -362,15 +363,14 @@ export default function Dashboard() {
   }
 
   const watchedUserName = form.watch("userName");
-  const currentUserEntries = entries.filter(
-    (e) => e.chapa === watchedUserName.split(" - ")[0],
-  );
+  const [currentUserEntries, setCurrentUserEntries] = useState<Entry[]>([]);
 
-  // useEffect(() => {
-  //   console.log(entries);
-  //   console.log(currentUserEntries);
-  //   console.log(watchedUserName);
-  // }, [currentUserEntries]);
+  useEffect(() => {
+    console.log(entries);
+    setCurrentUserEntries(
+      entries.filter((e) => e.chapa === watchedUserName.split(" - ")[0])
+    );
+  }, [entries, watchedUserName]);
 
   const selectedDateEntries = currentUserEntries.filter(
     (e) =>
@@ -428,10 +428,7 @@ export default function Dashboard() {
         usuarioId: session.userId,
         chapa: values.userName.split(" - ")[0],
       };
-
       if (isEditing && editingId) {
-        console.log(editingId);
-        console.log(payload);
         const response = await fetch(
           `http://${window.location.hostname}:8080/horas/${editingId}`,
           {
@@ -452,20 +449,6 @@ export default function Dashboard() {
         entries.find((e) => e.dataId === responseData.dataApontamentoId?.id);
 
         setEntries(
-          entries.map((e) => {
-            if (e.dataId == responseData.dataApontamentoId?.id) {
-              console.log(e.date);
-              console.log(e.totalHours);
-              return {
-                ...e,
-                status: "pending",
-              } as Entry;
-            }
-            return e;
-          }),
-        );
-
-        setEntries(
           entries.map((e) =>
             e.id === editingId ? { ...newEntry, id: editingId } : e,
           ),
@@ -474,6 +457,18 @@ export default function Dashboard() {
         toast.success("Apontamento atualizado!", {
           description: `${formattedHours}h - ${values.cif} (Atualizado no banco)`,
         });
+        setEntries(
+          entries.map((e) => {
+            if (e.dataId == newEntry.dataId) {
+              return {
+                ...e,
+                status: "pending",
+                aguardandoAjuste: responseData.dataApontamentoId?.aguardandoAjuste,
+              } as Entry;
+            }
+            return e;
+          }),
+        );
       } else {
         const response = await fetch(
           `http://${window.location.hostname}:8080/horas`,
@@ -520,7 +515,10 @@ export default function Dashboard() {
     } catch (error: any) {
       console.error("Erro ao apontar horas:", error);
       toast.error("Erro ao salvar apontamento", { description: error.message });
+    } finally {
+      form.clearErrors()
     }
+
   }
   const deleteEntry = async (id: string, status: EntryStatus) => {
     if (status === "approved" || status === "rejected") {
@@ -534,11 +532,18 @@ export default function Dashboard() {
         {
           method: "DELETE",
         },
-      );
+      ).catch(async (error) => {
+        if (error.status === 400 && await error.text() == "Apontamento já rejeitado, não é possível deletar.") {
+          toast.error("Apontamento já rejeitado, não é possível deletar.");
+          return;
+        }
+        throw new Error(error.message || "Erro ao remover no servidor");
+      });
 
-      if (!response.ok) {
-        throw new Error("Erro ao remover no servidor");
-      }
+      // if (!response.ok) {
+      //   const error = await response.text()
+      //   throw new Error(error || "Erro ao remover no servidor");
+      // }
 
       setEntries(entries.filter((e) => e.id !== id));
       toast.success("Apontamento removido com sucesso!");
@@ -569,6 +574,7 @@ export default function Dashboard() {
       totalHoursInput: entry.totalHours,
       description: entry.description || "",
     });
+
 
     setIsEditing(true);
     setEditingId(entry.id);
@@ -680,7 +686,7 @@ export default function Dashboard() {
                         (e) =>
                           e.status === "rejected" &&
                           format(e.date, "yyyy-MM-dd") ===
-                            format(date, "yyyy-MM-dd"),
+                          format(date, "yyyy-MM-dd"),
                       );
                       if (hasRejectedOnThisDate) {
                         const today = new Date();
@@ -1037,7 +1043,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                           <span className="font-bold">{entry.totalHours}h</span>
                           {entry.status === "pending" ||
-                          entry.status === "rejected" ? (
+                            entry.status === "rejected" ? (
                             <>
                               <Button
                                 type="button"

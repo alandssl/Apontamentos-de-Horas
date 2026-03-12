@@ -35,25 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  subDays,
-  startOfMonth,
-  subMonths,
-  endOfMonth,
-  isAfter,
-  isBefore,
-  isWithinInterval,
-  parseISO,
-  startOfDay,
-  endOfDay,
-} from "date-fns";
+
 
 type EntryStatus = "pending" | "approved" | "rejected";
 
@@ -122,7 +104,7 @@ export default function AdminAprovalPage() {
                   totalHours: h.horasEfetivas,
                   status: h.dataApontamentoId?.dataAprovacao
                     ? "approved"
-                    : h.dataApontamentoId?.dataRejeitada
+                    : h.dataApontamentoId?.dataRejeitada && h.dataApontamentoId?.aguardandoAjuste === true
                       ? "rejected"
                       : "pending",
                   type: String(h.tipoId?.tipo),
@@ -221,7 +203,6 @@ export default function AdminAprovalPage() {
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ aprovadorId: Number(userId) }),
         },
       );
 

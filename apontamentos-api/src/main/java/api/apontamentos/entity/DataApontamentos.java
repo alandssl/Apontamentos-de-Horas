@@ -38,10 +38,10 @@ public class DataApontamentos {
     @Column
     private String chapa;
 
-    @Column(name="data_exclusao")
+    @Column(name = "data_exclusao")
     private LocalDateTime dataExclusao;
 
-    @Column(name="data_aprovacao")
+    @Column(name = "data_aprovacao")
     private LocalDateTime dataAprovacao;
 
     @ManyToOne
@@ -54,5 +54,7 @@ public class DataApontamentos {
     @Column(name = "data_rejeitada")
     private LocalDateTime dataRejeitada;
 
-    
+    @Column(name = "aguardando_ajuste")
+    private Boolean aguardandoAjuste;
+
 }

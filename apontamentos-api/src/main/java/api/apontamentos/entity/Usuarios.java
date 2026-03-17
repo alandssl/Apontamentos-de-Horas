@@ -1,6 +1,11 @@
 package api.apontamentos.entity;
 
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.List;
+
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -21,7 +26,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @Getter
 @Setter
-public class Usuarios {
+public class Usuarios implements UserDetails{
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -61,5 +66,26 @@ public class Usuarios {
         this.dataAtualizacao = LocalDate.now();
     }
 
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of();
+    }
 
+    @Override
+    public String getPassword() {
+        return senha;
+    }
+
+    @Override
+    public String getUsername() {
+        return usuario;
+    }
+
+    @Override public boolean isAccountNonExpired() { return true; }
+
+    @Override public boolean isAccountNonLocked() { return true; }
+
+    @Override public boolean isCredentialsNonExpired() { return true; }
+    
+    @Override public boolean isEnabled() { return true; }
 }

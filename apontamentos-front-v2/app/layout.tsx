@@ -54,8 +54,8 @@ export default function RootLayout({
       >
         <AuthProvider>
           <Toaster />
-          <PushNotificationManager />
-          <InstallPrompt />
+          {/* <PushNotificationManager />
+          <InstallPrompt /> */}
 
           {children}
         </AuthProvider>

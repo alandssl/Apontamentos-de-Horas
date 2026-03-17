@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import webpush from "web-push";
 
 webpush.setVapidDetails(
-  "https://192.168.10.108:3000",
+  "https://192.168.10.166:3000",
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
   process.env.VAPID_PRIVATE_KEY!,
 );

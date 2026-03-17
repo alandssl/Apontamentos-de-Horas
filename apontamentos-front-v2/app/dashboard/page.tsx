@@ -144,8 +144,6 @@ export default function Dashboard() {
     setDebouncedQueryValues(debouncedQuery);
   }, [debouncedQuery]);
 
-
-
   useEffect(() => {
     setDebouncedQueryValues(cifOptions.slice(0, 100));
   }, [cifOptions, isDialogOpen]);
@@ -166,7 +164,6 @@ export default function Dashboard() {
     },
   });
 
-
   // Fetch session and APIs
   useEffect(() => {
     getSessionData().then((session) => {
@@ -179,6 +176,7 @@ export default function Dashboard() {
 
       // Fetch Employees
       if (session?.isAdmin && session?.userId) {
+        console.log("fetch: get");
         fetch(
           `http://${window.location.hostname}:8080/chapa-subordinado/${session.userId}`,
         )
@@ -271,6 +269,7 @@ export default function Dashboard() {
       //   .catch((err) => console.error("Error fetching usuarios", err));
 
       // Fetch Apontamentos
+      console.log("fetch: get");
       fetch(`http://${window.location.hostname}:8080/horas`)
         .then((res) => res.json())
         .then((data) => {
@@ -288,7 +287,8 @@ export default function Dashboard() {
             totalHours: h.horasEfetivas,
             status: h.dataApontamentoId?.dataAprovacao
               ? "approved"
-              : h.dataApontamentoId?.dataRejeitada && h.dataApontamentoId?.aguardandoAjuste
+              : h.dataApontamentoId?.dataRejeitada &&
+                  h.dataApontamentoId?.aguardandoAjuste
                 ? "rejected"
                 : "pending",
             aguardandoAjuste: h.dataApontamentoId?.aguardandoAjuste,
@@ -308,6 +308,7 @@ export default function Dashboard() {
       // Fetch CIFs
       // fetch();
       // `http://${window.location.hostname}:8080/cif/usuario/${session?.userId}`,
+      console.log("fetch: get");
       fetch(`http://${window.location.hostname}:8080/cif/todos`)
         .then((res) => res.json())
         .then((data) => {
@@ -325,6 +326,7 @@ export default function Dashboard() {
         .catch((err) => console.error("Error fetching cifs", err));
 
       // Fetch Tipos
+      console.log("fetch: get");
       fetch(`http://${window.location.hostname}:8080/tipos`)
         .then((res) => res.json())
         .then((data) => {
@@ -368,7 +370,7 @@ export default function Dashboard() {
   useEffect(() => {
     console.log(entries);
     setCurrentUserEntries(
-      entries.filter((e) => e.chapa === watchedUserName.split(" - ")[0])
+      entries.filter((e) => e.chapa === watchedUserName.split(" - ")[0]),
     );
   }, [entries, watchedUserName]);
 
@@ -394,6 +396,7 @@ export default function Dashboard() {
       const [h, m] = formattedHours.split(":");
       formattedHours = `${h.padStart(2, "0")}:${m}`;
     }
+    console.log("formattedHours", formattedHours);
     const session = await getSessionData();
 
     const newEntry: Entry = {
@@ -429,6 +432,7 @@ export default function Dashboard() {
         chapa: values.userName.split(" - ")[0],
       };
       if (isEditing && editingId) {
+        console.log("fetch: put");
         const response = await fetch(
           `http://${window.location.hostname}:8080/horas/${editingId}`,
           {
@@ -443,10 +447,24 @@ export default function Dashboard() {
           throw new Error(text || "Erro ao atualizar no servidor");
         }
         const responseData = await response.json();
-
+        console.log(await responseData);
         newEntry.dataId = responseData.dataApontamentoId?.id;
 
         entries.find((e) => e.dataId === responseData.dataApontamentoId?.id);
+
+        setEntries(
+          entries.map((e) => {
+            if (e.dataId == newEntry.dataId) {
+              return {
+                ...e,
+                status: "pending",
+                aguardandoAjuste:
+                  responseData.dataApontamentoId?.aguardandoAjuste,
+              } as Entry;
+            }
+            return e;
+          }),
+        );
 
         setEntries(
           entries.map((e) =>
@@ -457,19 +475,8 @@ export default function Dashboard() {
         toast.success("Apontamento atualizado!", {
           description: `${formattedHours}h - ${values.cif} (Atualizado no banco)`,
         });
-        setEntries(
-          entries.map((e) => {
-            if (e.dataId == newEntry.dataId) {
-              return {
-                ...e,
-                status: "pending",
-                aguardandoAjuste: responseData.dataApontamentoId?.aguardandoAjuste,
-              } as Entry;
-            }
-            return e;
-          }),
-        );
       } else {
+        console.log("fetch: post");
         const response = await fetch(
           `http://${window.location.hostname}:8080/horas`,
           {
@@ -516,9 +523,8 @@ export default function Dashboard() {
       console.error("Erro ao apontar horas:", error);
       toast.error("Erro ao salvar apontamento", { description: error.message });
     } finally {
-      form.clearErrors()
+      form.clearErrors();
     }
-
   }
   const deleteEntry = async (id: string, status: EntryStatus) => {
     if (status === "approved" || status === "rejected") {
@@ -527,13 +533,18 @@ export default function Dashboard() {
     }
 
     try {
+      console.log("fetch: delete");
       const response = await fetch(
         `http://${window.location.hostname}:8080/horas/${id}`,
         {
           method: "DELETE",
         },
       ).catch(async (error) => {
-        if (error.status === 400 && await error.text() == "Apontamento já rejeitado, não é possível deletar.") {
+        if (
+          error.status === 400 &&
+          (await error.text()) ==
+            "Apontamento já rejeitado, não é possível deletar."
+        ) {
           toast.error("Apontamento já rejeitado, não é possível deletar.");
           return;
         }
@@ -574,7 +585,6 @@ export default function Dashboard() {
       totalHoursInput: entry.totalHours,
       description: entry.description || "",
     });
-
 
     setIsEditing(true);
     setEditingId(entry.id);
@@ -686,7 +696,7 @@ export default function Dashboard() {
                         (e) =>
                           e.status === "rejected" &&
                           format(e.date, "yyyy-MM-dd") ===
-                          format(date, "yyyy-MM-dd"),
+                            format(date, "yyyy-MM-dd"),
                       );
                       if (hasRejectedOnThisDate) {
                         const today = new Date();
@@ -1043,7 +1053,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                           <span className="font-bold">{entry.totalHours}h</span>
                           {entry.status === "pending" ||
-                            entry.status === "rejected" ? (
+                          entry.status === "rejected" ? (
                             <>
                               <Button
                                 type="button"
